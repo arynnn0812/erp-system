@@ -99,7 +99,9 @@ export default function OrderCreate() {
                 <td style={{ width: 90 }}>
                   <input type="number" min="1" max={l.stock} value={l.quantity}
                     onChange={(e) => setCart((c) => c.map((x) =>
-                      x.productId === l.productId ? { ...x, quantity: Number(e.target.value) } : x))} />
+                      x.productId === l.productId
+                        ? { ...x, quantity: Math.max(1, Math.floor(Number(e.target.value)) || 1) } // never 0/NaN
+                        : x))} />
                 </td>
                 <td>{inr(l.price * l.quantity)}</td>
                 <td><button className="btn btn-danger" onClick={() =>

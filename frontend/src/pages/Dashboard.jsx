@@ -18,9 +18,11 @@ export default function Dashboard() {
   const [trend, setTrend] = useState([]);
   const [catSales, setCatSales] = useState([]);
   const [top, setTop] = useState([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/dashboard/summary').then((r) => setSummary(r.data.data)).catch(() => {});
+    api.get('/dashboard/summary').then((r) => setSummary(r.data.data))
+      .catch(() => setError('Could not load the dashboard. Check the API is running and refresh.'));
     if (hasRole('ADMIN', 'MANAGER')) {
       api.get('/dashboard/sales-trend?months=6').then((r) => setTrend(r.data.data)).catch(() => {});
       api.get('/dashboard/category-sales').then((r) => setCatSales(r.data.data)).catch(() => {});
@@ -28,7 +30,11 @@ export default function Dashboard() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (error) return <div className="error">{error}</div>;
   if (!summary) return <div className="page-loading">Loading dashboard…</div>;
+
+  // Colours are assigned to the slices actually drawn, so Cell i matches slice i.
+  const pieData = catSales.filter((c) => Number(c.revenue) > 0);
 
   return (
     <>
@@ -62,9 +68,8 @@ export default function Dashboard() {
               <h3>Sales by category</h3>
               <ResponsiveContainer width="100%" height={240}>
                 <PieChart>
-                  <Pie data={catSales.filter((c) => Number(c.revenue) > 0)} dataKey="revenue"
-                       nameKey="category" outerRadius={85} label>
-                    {catSales.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  <Pie data={pieData} dataKey="revenue" nameKey="category" outerRadius={85} label>
+                    {pieData.map((c, i) => <Cell key={c.category} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v) => inr(v)} />
                   <Legend />

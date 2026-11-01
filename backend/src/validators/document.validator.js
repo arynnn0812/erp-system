@@ -2,7 +2,7 @@ const { body, query, param } = require('express-validator');
 
 const uploadRules = [
   body('ownerType').isIn(['EMPLOYEE', 'PRODUCT']).withMessage("ownerType must be EMPLOYEE or PRODUCT"),
-  body('ownerId').isInt({ min: 1 }).withMessage('ownerId required'),
+  body('ownerId').isInt({ min: 1 }).withMessage('ownerId required').toInt(),
 ];
 
 const listRules = [

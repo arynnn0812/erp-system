@@ -13,7 +13,7 @@ async function getHealth(req, res, next) {
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
     });
-  } catch (err) {
+  } catch {
     // Server is up but DB is down -> 503 Service Unavailable
     res.status(503).json({
       success: false,

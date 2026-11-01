@@ -8,17 +8,17 @@ const categoryRules = [
 const productRules = [
   body('name').trim().notEmpty().withMessage('Name is required').isLength({ max: 150 }),
   body('sku').trim().notEmpty().withMessage('SKU is required').isLength({ max: 50 }),
-  body('categoryId').isInt({ min: 1 }).withMessage('categoryId must be a positive integer'),
-  body('price').isFloat({ min: 0 }).withMessage('price must be >= 0'),
-  body('quantity').optional().isInt({ min: 0 }).withMessage('quantity must be >= 0'),
-  body('reorderLevel').optional().isInt({ min: 0 }).withMessage('reorderLevel must be >= 0'),
+  body('categoryId').isInt({ min: 1 }).withMessage('categoryId must be a positive integer').toInt(),
+  body('price').isFloat({ min: 0 }).withMessage('price must be >= 0').toFloat(),
+  body('quantity').optional().isInt({ min: 0 }).withMessage('quantity must be >= 0').toInt(),
+  body('reorderLevel').optional().isInt({ min: 0 }).withMessage('reorderLevel must be >= 0').toInt(),
   body('supplier').optional().trim().isLength({ max: 150 }),
 ];
 
 const stockRules = [
   param('id').isInt({ min: 1 }),
   body('type').isIn(['IN', 'OUT']).withMessage("type must be 'IN' or 'OUT'"),
-  body('quantity').isInt({ min: 1 }).withMessage('quantity must be a positive integer'),
+  body('quantity').isInt({ min: 1 }).withMessage('quantity must be a positive integer').toInt(),
   body('reference').optional().trim().isLength({ max: 100 }),
 ];
 

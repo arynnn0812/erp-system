@@ -40,9 +40,13 @@ async function categorySales() {
             COALESCE(SUM(oi.line_total), 0) AS revenue,
             COALESCE(SUM(oi.quantity), 0)   AS units_sold
      FROM categories c
-     LEFT JOIN products p     ON p.category_id = c.id
-     LEFT JOIN order_items oi ON oi.product_id = p.id
-     LEFT JOIN orders o       ON o.id = oi.order_id AND o.status = 'CONFIRMED'
+     LEFT JOIN products p ON p.category_id = c.id
+     -- Items and their order are joined as one unit, so an item only survives
+     -- if its order is CONFIRMED. (A separate LEFT JOIN on orders would keep
+     -- every item and merely null out the cancelled order - counting it anyway.)
+     LEFT JOIN (order_items oi
+                JOIN orders o ON o.id = oi.order_id AND o.status = 'CONFIRMED')
+            ON oi.product_id = p.id
      GROUP BY c.id, c.name
      ORDER BY revenue DESC`
   );

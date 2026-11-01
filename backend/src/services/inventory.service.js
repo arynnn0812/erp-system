@@ -16,6 +16,8 @@ async function createCategory(name) {
 }
 
 async function updateCategory(id, name) {
+  const existing = await categoryModel.findByName(name);
+  if (existing && existing.id !== Number(id)) throw new ApiError(409, 'Category already exists');
   const ok = await categoryModel.update(id, name);
   if (!ok) throw new ApiError(404, 'Category not found');
 }
@@ -42,17 +44,27 @@ async function createProduct(data, actor) {
   const category = await categoryModel.findById(data.categoryId);
   if (!category) throw new ApiError(400, 'Invalid categoryId');
 
-  const id = await productModel.create(data);
-
-  // Opening stock is recorded as an IN transaction so history starts complete.
-  if (data.quantity > 0) {
-    await pool.execute(
-      `INSERT INTO inventory_transactions (product_id, type, quantity, reference, performed_by)
-       VALUES (?, 'IN', ?, 'OPENING_STOCK', ?)`,
-      [id, data.quantity, actor.id]
-    );
+  // Product row + opening-stock ledger row commit together: a product must
+  // never exist with a quantity its history cannot explain.
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const id = await productModel.create(data, conn);
+    if (data.quantity > 0) {
+      await conn.execute(
+        `INSERT INTO inventory_transactions (product_id, type, quantity, reference, performed_by)
+         VALUES (?, 'IN', ?, 'OPENING_STOCK', ?)`,
+        [id, data.quantity, actor.id]
+      );
+    }
+    await conn.commit();
+    return id;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
   }
-  return id;
 }
 
 async function updateProduct(id, data) {

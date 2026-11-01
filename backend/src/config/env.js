@@ -27,9 +27,9 @@ function parseTrustProxy(raw) {
 }
 
 module.exports = {
-  port: parseInt(process.env.PORT, 10) || 5000,
+  port: parseInt(process.env.PORT, 10) || 4000,
   nodeEnv: process.env.NODE_ENV || 'development',
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:3000',
+  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   jwt: {
     secret: process.env.JWT_SECRET,

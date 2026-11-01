@@ -8,17 +8,23 @@ const customerRules = [
 ];
 
 const orderRules = [
-  body('customerId').isInt({ min: 1 }).withMessage('customerId required'),
+  body('customerId').isInt({ min: 1 }).withMessage('customerId required').toInt(),
   body('items').isArray({ min: 1 }).withMessage('items must be a non-empty array'),
-  body('items.*.productId').isInt({ min: 1 }).withMessage('each item needs a productId'),
-  body('items.*.quantity').isInt({ min: 1 }).withMessage('each item quantity must be >= 1'),
-  body('taxPercent').optional().isFloat({ min: 0, max: 100 }),
-  body('discount').optional().isFloat({ min: 0 }),
+  body('items.*.productId').isInt({ min: 1 }).withMessage('each item needs a productId').toInt(),
+  body('items.*.quantity').isInt({ min: 1 }).withMessage('each item quantity must be >= 1').toInt(),
+  body('taxPercent').optional().isFloat({ min: 0, max: 100 }).toFloat(),
+  body('discount').optional().isFloat({ min: 0 }).toFloat(),
 ];
 
 // Pagination values are interpolated into LIMIT/OFFSET (mysql2 cannot bind
 // them), so they MUST be validated here: an unvalidated ?limit=abc becomes
 // "LIMIT NaN" -> SQL parse error -> 500, and ?limit=999999 is a free table scan.
+const pageRules = [
+  query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1').toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100').toInt(),
+  query('search').optional().isString().trim().isLength({ max: 100 }),
+];
+
 const orderListRules = [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }), // cap page size
@@ -36,4 +42,4 @@ const reportRules = [
 
 const idRule = [param('id').isInt({ min: 1 })];
 
-module.exports = { customerRules, orderRules, orderListRules, reportRules, idRule };
+module.exports = { customerRules, pageRules, orderRules, orderListRules, reportRules, idRule };

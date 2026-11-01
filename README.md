@@ -31,20 +31,28 @@ React SPA ──JSON/HTTPS──> Express API ──SQL pool──> MySQL (InnoD
 Prerequisites: Node 18+, MySQL 8.
 
 ```bash
-git clone <repo> && cd erp-system
-
-# database
-mysql -u root -p < database/schema.sql
+git clone https://github.com/arynnn0812/erp-system.git && cd erp-system
 
 # backend
 cd backend
 npm install
-cp .env.example .env        # fill in DB password, JWT secret; AWS optional
-node scripts/seed.js        # demo users for all 4 roles (password: Password@123)
-npm run dev                 # http://localhost:5000
+cp .env.example .env        # fill in DB credentials and JWT secret; AWS optional
+npm run migrate             # creates the database and applies database/migrations/*.sql
+npm run seed                # demo users for all 4 roles (password: Password@123)
+npm run dev                 # http://localhost:4000 (restarts on file changes)
+
+# frontend (second terminal)
+cd frontend
+npm install
+npm run dev                 # http://localhost:5173, proxies /api to the backend
 ```
 
-Health check: `GET http://localhost:5000/api/health`
+`npm run migrate` is safe to re-run: applied migrations are recorded in
+`schema_migrations`. A database created from the old `schema.sql` is detected
+and baselined automatically. Schema changes go in a new numbered file in
+`database/migrations/`; never edit one that has been applied.
+
+Health check: `GET http://localhost:4000/api/health`
 
 Demo accounts: `admin@erp.com`, `hr@erp.com`, `manager@erp.com`, `employee@erp.com`.
 
@@ -75,7 +83,20 @@ Full request/response examples and per-phase Postman test suites: `PHASE-1-GUIDE
 
 ## Testing
 
-Each phase guide ends with a Postman suite covering the happy path, auth failures (401/403), validation errors (400), business-rule rejections (409/422), and the atomicity/concurrency cases (mixed-order rollback, oversell prevention, rate limiting).
+Backend integration tests (Vitest + Supertest) run against a real MySQL, because
+transactions and row locking are what they need to prove. They create and drop
+their own `erp_test` database.
+
+```bash
+cd backend
+DB_PASSWORD=yourpassword npm test     # DB_HOST/DB_PORT/DB_USER default to 127.0.0.1:3306/root
+npm run lint
+```
+
+Covered: login and role enforcement, field-level salary hiding, atomic order
+creation and rollback, concurrent stock-outs (no oversell), cancel-and-restock,
+constraint errors mapped to 409/400, validation of query parameters, and
+regression tests for each bug fixed in the audit (see `docs/ROADMAP.md`).
 
 ## Screenshots
 

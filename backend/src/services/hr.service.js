@@ -1,6 +1,7 @@
 // HR business logic. Notable: salary changes are audited with old/new values.
 const departmentModel = require('../models/department.model');
 const employeeModel = require('../models/employee.model');
+const userModel = require('../models/user.model');
 const ApiError = require('../utils/ApiError');
 const audit = require('../utils/audit');
 
@@ -13,6 +14,8 @@ async function createDepartment(name) {
 }
 
 async function updateDepartment(id, name) {
+  const existing = await departmentModel.findByName(name);
+  if (existing && existing.id !== Number(id)) throw new ApiError(409, 'Department already exists');
   const ok = await departmentModel.update(id, name);
   if (!ok) throw new ApiError(404, 'Department not found');
 }
@@ -31,12 +34,25 @@ async function deleteDepartment(id) {
 
 // ---------- employees ----------
 
+// An employee may be linked to at most one login, and a login to at most one
+// employee - that link is what lets an EMPLOYEE read their own documents.
+async function assertLinkableUser(userId, employeeId = null) {
+  if (userId === null || userId === undefined) return;
+  const user = await userModel.findById(userId);
+  if (!user) throw new ApiError(400, `Invalid userId: ${userId}`);
+  const linked = await employeeModel.findByUserId(userId);
+  if (linked && linked.id !== Number(employeeId)) {
+    throw new ApiError(409, 'That login is already linked to another employee');
+  }
+}
+
 async function createEmployee(data, actor, ip) {
   const dupe = await employeeModel.findByEmail(data.email);
   if (dupe) throw new ApiError(409, 'Employee email already exists');
 
   const dept = await departmentModel.findById(data.departmentId);
   if (!dept) throw new ApiError(400, 'Invalid departmentId');
+  await assertLinkableUser(data.userId);
 
   const id = await employeeModel.create(data);
   await audit({
@@ -50,10 +66,17 @@ async function updateEmployee(id, data, actor, ip) {
   const existing = await employeeModel.findRaw(id);
   if (!existing) throw new ApiError(404, 'Employee not found');
 
+  const dupe = await employeeModel.findByEmail(data.email);
+  if (dupe && dupe.id !== Number(id)) throw new ApiError(409, 'Employee email already exists');
+
   const dept = await departmentModel.findById(data.departmentId);
   if (!dept) throw new ApiError(400, 'Invalid departmentId');
 
-  await employeeModel.update(id, data);
+  // userId omitted (e.g. the HR edit form) keeps the current link.
+  const userId = data.userId === undefined ? existing.user_id : data.userId;
+  await assertLinkableUser(userId, id);
+
+  await employeeModel.update(id, { ...data, userId });
 
   // Salary changes are sensitive - always audited with the diff.
   if (Number(existing.salary) !== Number(data.salary)) {

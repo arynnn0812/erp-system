@@ -1,14 +1,5 @@
--- =============================================================
--- Cloud-Based ERP System - MySQL Schema (Phase 1)
--- Engine: InnoDB (required for FK constraints + transactions)
--- Charset: utf8mb4 (full Unicode, incl. names in any language)
--- =============================================================
-
-CREATE DATABASE IF NOT EXISTS erp_db
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE erp_db;
+-- 001: initial schema (formerly database/schema.sql).
+-- Applied by backend/scripts/migrate.js - do not edit once released; add a new file instead.
 
 -- -------------------------------------------------------------
 -- 1. roles: lookup table. Separate table (not an ENUM on users)

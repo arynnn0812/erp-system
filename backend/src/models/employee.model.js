@@ -49,7 +49,7 @@ async function findById(id, role) {
 }
 
 async function findByEmail(email) {
-  const [rows] = await pool.execute('SELECT id FROM employees WHERE email = ?', [email]);
+  const [rows] = await pool.execute('SELECT id, user_id FROM employees WHERE email = ?', [email]);
   return rows[0] || null;
 }
 
@@ -71,9 +71,9 @@ async function create(e) {
 async function update(id, e) {
   const [result] = await pool.execute(
     `UPDATE employees
-     SET name = ?, email = ?, department_id = ?, designation = ?, joining_date = ?, salary = ?
+     SET user_id = ?, name = ?, email = ?, department_id = ?, designation = ?, joining_date = ?, salary = ?
      WHERE id = ?`,
-    [e.name, e.email, e.departmentId, e.designation, e.joiningDate, e.salary, id]
+    [e.userId ?? null, e.name, e.email, e.departmentId, e.designation, e.joiningDate, e.salary, id]
   );
   return result.affectedRows > 0;
 }
@@ -83,4 +83,11 @@ async function remove(id) {
   return result.affectedRows > 0;
 }
 
-module.exports = { list, findById, findByEmail, findRaw, create, update, remove, canSeeSalary };
+async function findByUserId(userId) {
+  const [rows] = await pool.execute('SELECT id FROM employees WHERE user_id = ?', [userId]);
+  return rows[0] || null;
+}
+
+module.exports = {
+  list, findById, findByEmail, findByUserId, findRaw, create, update, remove, canSeeSalary,
+};

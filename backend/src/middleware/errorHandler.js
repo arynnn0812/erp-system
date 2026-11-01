@@ -12,7 +12,6 @@ function notFound(req, res, next) {
   });
 }
 
-// eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   // Multer throws its own error class, which carries no statusCode - without
   // this branch an oversized upload would fall through to a generic 500
@@ -25,6 +24,16 @@ function errorHandler(err, req, res, next) {
         ? 'File too large (maximum 5 MB)'
         : `Upload error: ${err.message}`,
     });
+  }
+
+  // Constraint violations are client errors, not crashes. Services check the
+  // common cases first for friendlier messages; this catches the rest, including
+  // two requests racing past the same "does it exist?" check.
+  if (err.code === 'ER_DUP_ENTRY') {
+    return res.status(409).json({ success: false, message: 'A record with this value already exists' });
+  }
+  if (err.code === 'ER_NO_REFERENCED_ROW_2') {
+    return res.status(400).json({ success: false, message: 'A referenced record does not exist' });
   }
 
   const statusCode = err.statusCode || 500;

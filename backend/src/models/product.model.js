@@ -59,8 +59,9 @@ async function findBySku(sku) {
   return rows[0] || null;
 }
 
-async function create(p) {
-  const [result] = await pool.execute(
+// `db` lets the service run this inside its transaction (a pool connection).
+async function create(p, db = pool) {
+  const [result] = await db.execute(
     `INSERT INTO products (name, sku, category_id, price, quantity, reorder_level, supplier)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [p.name, p.sku, p.categoryId, p.price, p.quantity ?? 0, p.reorderLevel ?? 10, p.supplier ?? null]
@@ -71,9 +72,11 @@ async function create(p) {
 async function update(id, p) {
   const [result] = await pool.execute(
     `UPDATE products
-     SET name = ?, category_id = ?, price = ?, reorder_level = ?, supplier = ?
+     SET name = ?, category_id = ?, price = ?,
+         reorder_level = COALESCE(?, reorder_level), -- optional: omitted = unchanged
+         supplier = ?
      WHERE id = ? AND is_active = TRUE`,
-    [p.name, p.categoryId, p.price, p.reorderLevel, p.supplier ?? null, id]
+    [p.name, p.categoryId, p.price, p.reorderLevel ?? null, p.supplier ?? null, id]
   );
   return result.affectedRows > 0;
 }

@@ -1,98 +1,195 @@
 // Role-aware dashboard: renders whichever numbers the API returned for this
 // role (the backend already did the shaping), charts only for ADMIN/MANAGER.
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
-import api from '../api/axios.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import StatCard from '../components/StatCard.jsx';
-import { inr } from '../utils/format.js';
+import { useTheme } from '../context/ThemeContext.jsx';
+import { useApi } from '../hooks/useApi.js';
+import DataTable from '../components/ui/DataTable.jsx';
+import { Alert, Card, EmptyState, PageHeader, Skeleton, StatCard } from '../components/ui/index.jsx';
+import { inr, inrCompact, monthLabel } from '../utils/format.js';
 
-const PIE_COLORS = ['#0f4c81', '#1e8e5a', '#b45309', '#7c3aed', '#c0392b', '#0891b2'];
+const TREND_MONTHS = 6;
+
+// Recharts draws SVG attributes, which can't use var(); read the current
+// theme's token values instead (re-read whenever the theme changes).
+function useChartColors(theme) {
+  return useMemo(() => {
+    const css = getComputedStyle(document.documentElement);
+    const v = (name) => css.getPropertyValue(name).trim();
+    return {
+      series: [1, 2, 3, 4, 5, 6].map((i) => v(`--chart-${i}`)),
+      grid: v('--chart-grid'),
+      axis: v('--muted'),
+      surface: v('--surface'),
+    };
+  }, [theme]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+// The API only returns months that had sales; fill the gaps with zero so the
+// chart's x-axis is continuous.
+function fillMonths(rows, months) {
+  const byMonth = new Map(rows.map((r) => [r.month, Number(r.revenue)]));
+  const out = [];
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - (months - 1));
+  for (let i = 0; i < months; i += 1) {
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    out.push({ month: key, revenue: byMonth.get(key) || 0 });
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+
+function ChartTooltip({ active, payload, label, labelFormat = (l) => l }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <div className="muted">{labelFormat(label ?? payload[0].name)}</div>
+      <strong className="num">{inr(payload[0].value)}</strong>
+    </div>
+  );
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
-  const [summary, setSummary] = useState(null);
-  const [trend, setTrend] = useState([]);
-  const [catSales, setCatSales] = useState([]);
-  const [top, setTop] = useState([]);
-  const [error, setError] = useState('');
+  const { theme } = useTheme();
+  const colors = useChartColors(theme);
+  const seesSales = hasRole('ADMIN', 'MANAGER');
 
-  useEffect(() => {
-    api.get('/dashboard/summary').then((r) => setSummary(r.data.data))
-      .catch(() => setError('Could not load the dashboard. Check the API is running and refresh.'));
-    if (hasRole('ADMIN', 'MANAGER')) {
-      api.get('/dashboard/sales-trend?months=6').then((r) => setTrend(r.data.data)).catch(() => {});
-      api.get('/dashboard/category-sales').then((r) => setCatSales(r.data.data)).catch(() => {});
-      api.get('/dashboard/top-products?limit=5').then((r) => setTop(r.data.data)).catch(() => {});
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const summary = useApi('/dashboard/summary');
+  const trend = useApi(seesSales ? '/dashboard/sales-trend' : null, { months: TREND_MONTHS });
+  const categories = useApi(seesSales ? '/dashboard/category-sales' : null);
+  const top = useApi(seesSales ? '/dashboard/top-products' : null, { limit: 5 });
 
-  if (error) return <div className="error">{error}</div>;
-  if (!summary) return <div className="page-loading">Loading dashboard…</div>;
+  const s = summary.data || {};
+  const trendData = useMemo(() => fillMonths(trend.data || [], TREND_MONTHS), [trend.data]);
+  const pieData = useMemo(
+    () => (categories.data || []).filter((c) => Number(c.revenue) > 0).map((c) => ({ ...c, revenue: Number(c.revenue) })),
+    [categories.data]
+  );
+  const pieTotal = pieData.reduce((sum, c) => sum + c.revenue, 0);
+  const hasTrend = trendData.some((m) => m.revenue > 0);
 
-  // Colours are assigned to the slices actually drawn, so Cell i matches slice i.
-  const pieData = catSales.filter((c) => Number(c.revenue) > 0);
+  // Cards for whichever figures this role was sent; placeholders until then.
+  const cards = summary.data ? [
+    'total_revenue' in s && { label: 'Revenue', value: inr(s.total_revenue), icon: 'rupee', tone: 'primary' },
+    'total_orders' in s && { label: 'Confirmed orders', value: s.total_orders, icon: 'receipt', tone: 'info' },
+    { label: 'Active products', value: s.total_products, icon: 'box', tone: 'primary' },
+    { label: 'Low stock', value: s.low_stock_count, icon: 'alert', tone: s.low_stock_count > 0 ? 'warning' : 'success' },
+    'total_customers' in s && { label: 'Customers', value: s.total_customers, icon: 'users', tone: 'info' },
+    'total_employees' in s && { label: 'Employees', value: s.total_employees, icon: 'badge', tone: 'success' },
+  ].filter(Boolean) : null;
 
   return (
     <>
-      <h2>Welcome, {user.name}</h2>
+      <PageHeader
+        title={`${greeting()}, ${user.name.split(' ')[0]}`}
+        description="Here's how the business is doing today."
+        actions={hasRole('ADMIN', 'MANAGER') && (
+          <Link to="/orders/new" className="btn btn-primary">New order</Link>
+        )}
+      />
+
+      <Alert>{summary.error && 'Could not load the dashboard. Check the API is running, then refresh.'}</Alert>
 
       <div className="stats">
-        {'total_revenue' in summary && <StatCard accent label="Total Revenue" value={inr(summary.total_revenue)} />}
-        {'total_orders' in summary && <StatCard label="Orders" value={summary.total_orders} />}
-        <StatCard label="Products" value={summary.total_products} />
-        <StatCard label="Low Stock" value={summary.low_stock_count} accent={summary.low_stock_count > 0} />
-        {'total_customers' in summary && <StatCard label="Customers" value={summary.total_customers} />}
-        {'total_employees' in summary && <StatCard label="Employees" value={summary.total_employees} />}
+        {cards
+          ? cards.map((c) => <StatCard key={c.label} {...c} />)
+          : !summary.error && [0, 1, 2, 3].map((i) => <StatCard key={i} label={<Skeleton width="50%" />} loading />)}
       </div>
 
-      {hasRole('ADMIN', 'MANAGER') && (
-        <>
+      {s.low_stock_count > 0 && (
+        <Alert tone="warning">
+          {s.low_stock_count} {s.low_stock_count === 1 ? 'product is' : 'products are'} below their reorder level.{' '}
+          <Link to="/inventory">Review inventory</Link>
+        </Alert>
+      )}
+
+      {seesSales && (
+        <div className="stack">
           <div className="grid-2">
-            <div className="card">
-              <h3>Monthly sales</h3>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={trend}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip formatter={(v) => inr(v)} />
-                  <Line type="monotone" dataKey="revenue" stroke="#0f4c81" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="card">
-              <h3>Sales by category</h3>
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="revenue" nameKey="category" outerRadius={85} label>
-                    {pieData.map((c, i) => <Cell key={c.category} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => inr(v)} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <Card title="Revenue" subtitle={`Confirmed orders, last ${TREND_MONTHS} months`} pad>
+              <div className="chart-box">
+                {trend.loading ? <Skeleton height="100%" /> : !hasTrend ? (
+                  <EmptyState icon="chart" title="No sales yet" message="Revenue appears here once orders are placed." />
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={colors.series[0]} stopOpacity={0.28} />
+                          <stop offset="100%" stopColor={colors.series[0]} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke={colors.grid} vertical={false} />
+                      <XAxis dataKey="month" tickFormatter={(m) => monthLabel(m)} tick={{ fill: colors.axis, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={inrCompact} tick={{ fill: colors.axis, fontSize: 12 }} axisLine={false} tickLine={false} width={56} />
+                      <Tooltip content={<ChartTooltip labelFormat={(m) => monthLabel(m, true)} />} cursor={{ stroke: colors.grid }} />
+                      <Area type="monotone" dataKey="revenue" stroke={colors.series[0]} strokeWidth={2.2} fill="url(#revFill)"
+                            activeDot={{ r: 5, stroke: colors.surface, strokeWidth: 2 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </Card>
+
+            <Card title="Sales by category" subtitle="All-time confirmed revenue" pad>
+              <div className="chart-box">
+                {categories.loading ? <Skeleton height="100%" /> : pieData.length === 0 ? (
+                  <EmptyState icon="layers" title="No category sales yet" message="Each category's share of revenue appears here." />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div style={{ flex: 1, minHeight: 0 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={pieData} dataKey="revenue" nameKey="category" innerRadius="58%" outerRadius="88%"
+                               paddingAngle={pieData.length > 1 ? 2 : 0} stroke={colors.surface} strokeWidth={2}>
+                            {pieData.map((c, i) => <Cell key={c.category} fill={colors.series[i % colors.series.length]} />)}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="legend">
+                      {pieData.map((c, i) => (
+                        <span key={c.category}>
+                          <i style={{ background: colors.series[i % colors.series.length] }} />
+                          {c.category} · {Math.round((c.revenue / pieTotal) * 100)}%
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
 
-          <div className="card">
-            <h3>Top products (last 90 days)</h3>
-            <table>
-              <thead><tr><th>Product</th><th>SKU</th><th>Units sold</th><th>Revenue</th></tr></thead>
-              <tbody>
-                {top.length === 0 && <tr><td colSpan={4} className="empty">No sales yet</td></tr>}
-                {top.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.name}</td><td>{p.sku}</td><td>{p.units_sold}</td><td>{inr(p.revenue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+          <Card title="Top products" subtitle="By units sold, last 90 days">
+            <DataTable
+              caption="Top products by units sold"
+              loading={top.loading}
+              error={top.error}
+              rows={top.data || []}
+              empty={{ icon: 'box', title: 'No sales in the last 90 days' }}
+              columns={[
+                { key: 'name', label: 'Product', primary: true, render: (p) => <span className="cell-strong">{p.name}</span> },
+                { key: 'sku', label: 'SKU', render: (p) => <span className="mono muted">{p.sku}</span> },
+                { key: 'units_sold', label: 'Units sold', align: 'right', render: (p) => <span className="num">{p.units_sold}</span> },
+                { key: 'revenue', label: 'Revenue', align: 'right', render: (p) => <span className="num cell-strong">{inr(p.revenue)}</span> },
+              ]}
+            />
+          </Card>
+        </div>
       )}
     </>
   );

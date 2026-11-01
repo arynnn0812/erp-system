@@ -1,51 +1,68 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api, { errMsg } from '../../api/axios.js';
-import DataTable from '../../components/DataTable.jsx';
-import { inr, dateFmt } from '../../utils/format.js';
+import { usePagedList } from '../../hooks/useApi.js';
+import DataTable from '../../components/ui/DataTable.jsx';
+import Button from '../../components/ui/Button.jsx';
+import Icon from '../../components/ui/Icon.jsx';
+import { useToast } from '../../components/ui/Toast.jsx';
+import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
+import { Badge, Card, PageHeader } from '../../components/ui/index.jsx';
+import { inr, dateLong } from '../../utils/format.js';
 
 export default function Orders() {
-  const [data, setData] = useState({ rows: [], page: 1, pages: 1 });
+  const toast = useToast();
+  const confirm = useConfirm();
+  const list = usePagedList('/orders');
 
-  async function load(p = 1) {
-    const res = await api.get('/orders', { params: { page: p, limit: 10 } });
-    setData(res.data);
-  }
-  useEffect(() => { load(1); }, []);
-
-  async function cancel(id) {
-    if (!confirm(`Cancel order #${id}? Stock will be restored.`)) return;
-    try { await api.post(`/orders/${id}/cancel`); load(data.page); }
-    catch (err) { alert(errMsg(err)); }
+  async function cancel(order) {
+    const ok = await confirm({
+      title: `Cancel order #${order.id}?`,
+      message: `The ${order.item_count} ${order.item_count === 1 ? 'item goes' : 'items go'} back into stock. This can't be undone.`,
+      confirmLabel: 'Cancel order', cancelLabel: 'Keep order', danger: true,
+    });
+    if (!ok) return;
+    try { await api.post(`/orders/${order.id}/cancel`); toast.success(`Order #${order.id} cancelled, stock restored`); list.reload(); }
+    catch (err) { toast.error(errMsg(err)); }
   }
 
   const columns = [
-    { key: 'id', label: '#' },
-    { key: 'order_date', label: 'Date', render: (r) => dateFmt(r.order_date) },
+    { key: 'id', label: 'Order', primary: true, render: (r) => <span className="cell-strong num">#{r.id}</span> },
+    { key: 'order_date', label: 'Date', render: (r) => <span className="nowrap">{dateLong(r.order_date)}</span> },
     { key: 'customer', label: 'Customer' },
-    { key: 'item_count', label: 'Items' },
-    { key: 'grand_total', label: 'Total', render: (r) => inr(r.grand_total) },
+    { key: 'item_count', label: 'Items', align: 'right', render: (r) => <span className="num">{r.item_count}</span> },
+    { key: 'grand_total', label: 'Total', align: 'right', render: (r) => <span className="num cell-strong">{inr(r.grand_total)}</span> },
     {
       key: 'status', label: 'Status',
-      render: (r) => (
-        <span className={r.status === 'CONFIRMED' ? 'tag-ok' : 'tag-cancel'}>{r.status}</span>
-      ),
+      render: (r) => (r.status === 'CONFIRMED'
+        ? <Badge tone="success" dot>Confirmed</Badge>
+        : <Badge tone="neutral" dot>Cancelled</Badge>),
     },
     {
-      key: 'actions', label: '',
+      key: 'actions', label: '', actions: true,
       render: (r) => r.status === 'CONFIRMED' && (
-        <button className="btn btn-danger" onClick={() => cancel(r.id)}>Cancel</button>
+        <Button size="sm" variant="ghost-danger" onClick={() => cancel(r)}>Cancel</Button>
       ),
     },
   ];
 
   return (
     <>
-      <div className="row-between">
-        <h2>Orders</h2>
-        <Link to="/orders/new"><button className="btn btn-primary">+ New order</button></Link>
-      </div>
-      <DataTable columns={columns} rows={data.rows} page={data.page} pages={data.pages} onPage={load} />
+      <PageHeader
+        title="Orders"
+        description="Every sale, newest first. Cancelling an order returns its stock."
+        actions={<Link to="/orders/new" className="btn btn-primary"><Icon name="plus" size={17} /> New order</Link>}
+      />
+      <Card>
+        <DataTable
+          caption="Orders"
+          columns={columns} rows={list.rows} loading={list.loading} error={list.error}
+          page={list.page} pages={list.pages} total={list.total} onPage={list.setPage}
+          empty={{
+            icon: 'receipt', title: 'No orders yet', message: 'Orders you create will show up here.',
+            action: <Link to="/orders/new" className="btn btn-primary btn-sm">Create the first order</Link>,
+          }}
+        />
+      </Card>
     </>
   );
 }

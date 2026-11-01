@@ -14,6 +14,7 @@ A production-style ERP for small/medium businesses: **inventory, sales/finance, 
 - **HR** — departments and employees, HR/Admin-only management, field-level access (managers never receive salary data), audited salary changes.
 - **Dashboard** — role-aware summary counters, monthly sales trend, category-wise sales, top sellers; all aggregation in SQL.
 - **Documents** — uploads to a private S3 bucket (5MB cap, type verified from the file's magic bytes, not just the client's claim), metadata in MySQL, 5-minute presigned download URLs, S3 cleanup when the database write fails, delete endpoint. Employee documents are readable only by ADMIN, HR, or the employee themselves; product documents by any authenticated user. Every presigned URL issued is audited.
+- **UI** — responsive React SPA built on a small in-house design system (CSS design tokens, no UI framework): light/dark/system themes, sidebar layout with a mobile drawer, accessible dialogs (focus trap, Esc, focus restore), toasts and confirm dialogs, skeleton loading, empty and error states, tables that become labelled cards on phones, debounced search, per-page error boundary, and route-level code splitting.
 - **Cross-cutting** — centralized error handling (constraint violations mapped to 409/400), express-validator validation and sanitization, parameterized queries everywhere, Helmet + locked-down CORS, API-wide rate limit, structured JSON logging (pino) with request IDs and secret redaction, graceful shutdown, append-only audit log (including logins and failed logins), health check with DB ping.
 
 ## Architecture
@@ -59,6 +60,8 @@ Demo accounts: `admin@erp.com`, `hr@erp.com`, `manager@erp.com`, `employee@erp.c
 ## Environment variables
 
 See `backend/.env.example`. Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECRET`. Optional: `AWS_REGION` + `S3_BUCKET_NAME` (document endpoints return 503 with a clear message when unset). On EC2, prefer an IAM instance role over access keys.
+
+Frontend: `API_URL` (Vite dev proxy target, default `http://localhost:4000`) and `VITE_SHOW_DEMO_ACCOUNTS=true` to list the seeded demo accounts on the sign-in page of a demo build (they are always listed in development, never otherwise).
 
 `.env` is intentionally **not** committed or shipped — copy `.env.example` and fill it in per environment.
 
@@ -112,13 +115,22 @@ Summarized in `DEPLOYMENT-GUIDE.md`: Ubuntu EC2, Node via nvm, MySQL (RDS or loc
 
 ```
 erp-system/
-├── database/schema.sql        # 12 tables, FKs, CHECKs, indexes, seed roles
+├── database/migrations/       # versioned SQL, applied by `npm run migrate`
+├── docs/ROADMAP.md
 ├── backend/
-│   ├── scripts/seed.js
+│   ├── scripts/  migrate.js  seed.js
+│   ├── test/                  # Vitest + Supertest integration tests
 │   └── src/
 │       ├── app.js  server.js
 │       ├── config/     env.js  db.js  s3.js
-│       ├── middleware/ auth  roles  validate  upload  errorHandler
+│       ├── middleware/ auth  roles  validate  upload  errorHandler  requestLogger
 │       ├── validators/ controllers/  services/  models/  routes/  utils/
-└── frontend/                  # React SPA (see FRONTEND-ARCHITECTURE.md)
+└── frontend/src/
+    ├── styles/                # tokens.css (themes), base, layout, components
+    ├── components/ui/         # Button, Field, Modal, Toast, ConfirmDialog, DataTable, …
+    ├── components/layout/     # AppShell (sidebar + top bar), ThemeSwitch, ErrorBoundary
+    ├── hooks/useApi.js        # useApi / usePagedList
+    ├── config/nav.js          # role access shared by the sidebar and route guards
+    ├── context/               # AuthContext, ThemeContext
+    └── pages/
 ```

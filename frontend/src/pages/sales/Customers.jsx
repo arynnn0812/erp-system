@@ -1,70 +1,96 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import api, { errMsg } from '../../api/axios.js';
-import DataTable from '../../components/DataTable.jsx';
-import Modal from '../../components/Modal.jsx';
+import { usePagedList } from '../../hooks/useApi.js';
+import DataTable from '../../components/ui/DataTable.jsx';
+import Modal, { ModalFooter } from '../../components/ui/Modal.jsx';
+import Button from '../../components/ui/Button.jsx';
+import Field from '../../components/ui/Field.jsx';
+import { useToast } from '../../components/ui/Toast.jsx';
+import { Alert, Card, PageHeader, SearchInput } from '../../components/ui/index.jsx';
 
 const EMPTY = { name: '', email: '', phone: '', address: '' };
 
 export default function Customers() {
-  const [data, setData] = useState({ rows: [], page: 1, pages: 1 });
+  const toast = useToast();
   const [search, setSearch] = useState('');
+  const list = usePagedList('/customers', { search });
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  async function load(p = 1) {
-    const res = await api.get('/customers', { params: { search, page: p, limit: 10 } });
-    setData(res.data);
-  }
-  useEffect(() => { load(1); }, [search]); // eslint-disable-line
+  const openForm = (f) => { setError(''); setForm(f); };
 
   async function save(e) {
     e.preventDefault();
-    setError('');
+    setError(''); setBusy(true);
     try {
       if (form.id) await api.put(`/customers/${form.id}`, form);
       else await api.post('/customers', form);
-      setForm(null); load(data.page);
-    } catch (err) { setError(errMsg(err)); }
+      toast.success(form.id ? `${form.name} updated` : `${form.name} added`);
+      setForm(null); list.reload();
+    } catch (err) { setError(errMsg(err)); } finally { setBusy(false); }
   }
 
+  const dash = (v) => v || <span className="muted">—</span>;
   const columns = [
-    { key: 'name', label: 'Name' },
-    { key: 'email', label: 'Email', render: (r) => r.email || '—' },
-    { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
-    { key: 'address', label: 'Address', render: (r) => r.address || '—' },
-    { key: 'actions', label: '', render: (r) => (
-        <button className="btn" onClick={() => setForm({ id: r.id, name: r.name,
-          email: r.email || '', phone: r.phone || '', address: r.address || '' })}>Edit</button>
-    )},
+    { key: 'name', label: 'Name', primary: true, render: (r) => <span className="cell-strong">{r.name}</span> },
+    { key: 'email', label: 'Email', render: (r) => (r.email ? <a href={`mailto:${r.email}`}>{r.email}</a> : dash()) },
+    { key: 'phone', label: 'Phone', render: (r) => <span className="num">{dash(r.phone)}</span> },
+    { key: 'address', label: 'Address', render: (r) => dash(r.address) },
+    {
+      key: 'actions', label: '', actions: true,
+      render: (r) => (
+        <Button size="sm" variant="ghost" collapse icon="edit" onClick={() => openForm({ id: r.id, name: r.name,
+          email: r.email || '', phone: r.phone || '', address: r.address || '' })}>Edit</Button>
+      ),
+    },
   ];
 
   return (
     <>
-      <div className="row-between">
-        <h2>Customers</h2>
-        <div className="row">
-          <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 200 }} />
-          <button className="btn btn-primary" onClick={() => setForm({ ...EMPTY })}>+ Customer</button>
-        </div>
-      </div>
+      <PageHeader
+        title="Customers"
+        description="People and businesses you sell to."
+        actions={<Button variant="primary" icon="plus" onClick={() => openForm({ ...EMPTY })}>Add customer</Button>}
+      />
 
-      <DataTable columns={columns} rows={data.rows} page={data.page} pages={data.pages} onPage={load} />
+      <Card>
+        <div className="toolbar">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search name, email or phone…" label="Search customers" />
+          {!list.loading && <span className="toolbar-meta">{list.total} {list.total === 1 ? 'customer' : 'customers'}</span>}
+        </div>
+        <DataTable
+          caption="Customers"
+          columns={columns} rows={list.rows} loading={list.loading} error={list.error}
+          page={list.page} pages={list.pages} total={list.total} onPage={list.setPage}
+          empty={search
+            ? { icon: 'search', title: 'No matching customers', message: `Nothing matches “${search}”.` }
+            : { icon: 'users', title: 'No customers yet', message: 'Add a customer to start taking orders.' }}
+        />
+      </Card>
 
       {form && (
-        <Modal title={form.id ? 'Edit customer' : 'New customer'} onClose={() => setForm(null)}>
-          {error && <div className="error">{error}</div>}
+        <Modal title={form.id ? 'Edit customer' : 'Add customer'} onClose={() => setForm(null)}>
+          <Alert>{error}</Alert>
           <form onSubmit={save}>
-            <label>Name</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            <label>Email</label>
-            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <label>Phone</label>
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            <label>Address</label>
-            <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-            <div style={{ marginTop: 16 }}>
-              <button className="btn btn-primary">Save</button>
+            <Field label="Name">
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={100} />
+            </Field>
+            <div className="form-grid">
+              <Field label="Email" optional>
+                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} maxLength={255} />
+              </Field>
+              <Field label="Phone" optional>
+                <input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={20} />
+              </Field>
             </div>
+            <Field label="Address" optional>
+              <textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} maxLength={255} />
+            </Field>
+            <ModalFooter>
+              <Button onClick={() => setForm(null)}>Cancel</Button>
+              <Button type="submit" variant="primary" loading={busy}>{form.id ? 'Save changes' : 'Add customer'}</Button>
+            </ModalFooter>
           </form>
         </Modal>
       )}

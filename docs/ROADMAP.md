@@ -4,11 +4,14 @@ Ordered by value: first make what exists **correct**, then **safe**, then
 **complete**, then **pleasant**, then **shippable**. Each phase ends with the
 test suite green and both apps building.
 
+**Status:** Phases 0, 1, 2 and 4 are done. Phase 4 was built before Phase 3
+so the new feature pages are written once, on the finished design system.
+
 Guiding rules: keep the existing architecture (it is sound), add a dependency
 only when it replaces real hand-written risk, and never claim a feature,
 test result or metric that has not been run.
 
-## Phase 0 — Foundation
+## Phase 0 — Foundation ✅
 Groundwork every later phase depends on.
 - Repo hygiene: root `.gitignore`, remove committed `.DS_Store`.
 - Upgrade vulnerable dependencies (`npm audit`: 7 backend, 8 frontend; `multer` 1.x → 2.x).
@@ -17,7 +20,7 @@ Groundwork every later phase depends on.
 - Test harness: Vitest + Supertest integration tests against a real MySQL.
 - ESLint for backend and frontend.
 
-## Phase 1 — Correctness (audit bugs B1–B11)
+## Phase 1 — Correctness (audit bugs B1–B11) ✅
 Each fix lands with a regression test.
 - Dates shift a day (mysql2 `DATE` → JS `Date`): `dateStrings: true`.
 - Category revenue counts cancelled orders: fix the join.
@@ -29,7 +32,7 @@ Each fix lands with a regression test.
 - Product creation + opening stock not atomic.
 - Frontend: stuck dashboard loader, pie color mismatch, order quantity 0.
 
-## Phase 2 — Security & reliability
+## Phase 2 — Security & reliability ✅
 - Per-request user check: deactivated users and role changes take effect
   immediately; `token_version` enables real logout / revoke-all-sessions.
 - JWT in an `httpOnly`, `SameSite=Strict` cookie (Bearer kept for API clients).
@@ -51,13 +54,20 @@ Backend endpoints that already exist get a UI; a few high-value additions.
 - Employee self-service: "My profile" and own documents for the EMPLOYEE role.
 - Realistic demo seed data so the dashboard is meaningful out of the box.
 
-## Phase 4 — UI/UX redesign
-- Design tokens (color, type scale, spacing, radius, elevation) with light + dark themes.
-- App shell: collapsible sidebar, top bar, mobile drawer.
-- Shared components: Button, Input/Field (labelled), Select, Modal (Esc, focus
-  trap, `role="dialog"`), ConfirmDialog, Toasts, Skeletons, EmptyState, Badge.
-- Responsive tables (card layout on mobile), debounced search, loading/error states, 404 page.
-- Subtle motion respecting `prefers-reduced-motion`.
+## Phase 4 — UI/UX redesign ✅
+- Design tokens (color, type scale, spacing, radius, elevation) with light + dark
+  themes; light / dark / system switch, applied before first paint.
+- App shell: sidebar grouped by area, top bar, mobile drawer, skip link,
+  per-page document titles; nav and route guards share one role config.
+- Shared components: Button, Field (labelled, hints, errors), Modal (Esc, focus
+  trap, focus restore, `role="dialog"`, stacking), ConfirmDialog and Toasts
+  (replacing every `window.confirm` / `alert`), Skeleton, EmptyState, Badge,
+  StatCard, debounced SearchInput.
+- Responsive DataTable (labelled cards on phones, skeleton rows, empty/error states).
+- `useApi` / `usePagedList` hooks: ignore out-of-order responses (fixes a
+  stale-search race), step back a page when the last row is deleted.
+- Error boundary per page, 404 page, theme-aware charts, print styles,
+  `prefers-reduced-motion`, route-level code splitting (initial JS 719 kB → 266 kB).
 
 ## Phase 5 — Production readiness
 - Dockerfiles (API, frontend via nginx) + `docker-compose.yml` (MySQL, API, web).

@@ -3,6 +3,7 @@
 // Every route/controller just calls next(err); the response format for ALL
 // errors is decided here, in one place.
 const config = require('../config/env');
+const logger = require('../utils/logger');
 
 // 404 - reached only when no route matched
 function notFound(req, res, next) {
@@ -46,12 +47,14 @@ function errorHandler(err, req, res, next) {
       : 'Internal server error';
 
   if (statusCode >= 500) {
-    console.error(err); // in production this would go to a proper logger
+    (req.log || logger).error({ err }, 'unhandled error'); // carries the request id
   }
 
   res.status(statusCode).json({
     success: false,
     message,
+    // Lets a user report "it failed" with an id support can find in the logs.
+    ...(statusCode >= 500 && { requestId: req.id }),
     // stack trace only in development, for debugging
     ...(config.nodeEnv === 'development' && { stack: err.stack }),
   });

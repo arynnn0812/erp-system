@@ -8,13 +8,13 @@ A production-style ERP for small/medium businesses: **inventory, sales/finance, 
 
 ## Features
 
-- **Authentication & RBAC** — JWT auth, bcrypt password hashing, four roles enforced at route level, at SQL level (sensitive fields like salary), and at object level (whether *this* user may read *this* row). Login rate limiting, admin-only registration.
+- **Authentication & RBAC** — JWT in an `httpOnly`, `SameSite=Strict` cookie (Bearer header also accepted for API clients), bcrypt hashing, four roles enforced at route level, at SQL level (salary), and at object level (whether *this* user may read *this* row). Sessions are revocable: every request re-checks the user, so deactivation, role changes, password changes and "log out everywhere" apply immediately (`token_version`). Password policy (10+ chars, letter + digit, ≤72 bytes for bcrypt), failed-login rate limiting, admin account management with self-lockout protection.
 - **Inventory** — product/category CRUD, transactional stock in/out with `SELECT ... FOR UPDATE` row locking, append-only transaction ledger, low-stock alerts, search + pagination, soft delete.
 - **Sales/Finance** — customers, multi-item invoices with server-side totals (tax/discount), **atomic order confirmation** (order + items + stock deduction + ledger commit or roll back together), deadlock-safe lock ordering, compensating cancel-with-restock, date-range revenue reports, top products.
 - **HR** — departments and employees, HR/Admin-only management, field-level access (managers never receive salary data), audited salary changes.
 - **Dashboard** — role-aware summary counters, monthly sales trend, category-wise sales, top sellers; all aggregation in SQL.
-- **Documents** — uploads to a private S3 bucket (5MB cap, mime whitelist, memory storage), metadata in MySQL, 5-minute presigned download URLs. Employee documents are readable only by ADMIN, HR, or the employee themselves; product documents by any authenticated user. Every presigned URL issued is audited.
-- **Cross-cutting** — centralized error handling, express-validator input validation, parameterized queries everywhere, Helmet + locked-down CORS, append-only audit log, health check with DB ping.
+- **Documents** — uploads to a private S3 bucket (5MB cap, type verified from the file's magic bytes, not just the client's claim), metadata in MySQL, 5-minute presigned download URLs, S3 cleanup when the database write fails, delete endpoint. Employee documents are readable only by ADMIN, HR, or the employee themselves; product documents by any authenticated user. Every presigned URL issued is audited.
+- **Cross-cutting** — centralized error handling (constraint violations mapped to 409/400), express-validator validation and sanitization, parameterized queries everywhere, Helmet + locked-down CORS, API-wide rate limit, structured JSON logging (pino) with request IDs and secret redaction, graceful shutdown, append-only audit log (including logins and failed logins), health check with DB ping.
 
 ## Architecture
 
@@ -68,8 +68,8 @@ See `backend/.env.example`. Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECR
 
 | Area | Base path | Highlights |
 |---|---|---|
-| Auth | `/api/auth` | login (rate-limited), register (admin-only), me, logout |
-| Users | `/api/users` | list (admin) |
+| Auth | `/api/auth` | login (rate-limited), register (admin-only), me, logout, logout-all, change-password |
+| Users | `/api/users` | list, change role / activate / deactivate, reset password (admin) |
 | Categories | `/api/categories` | CRUD, FK-protected delete |
 | Products | `/api/products` | CRUD, search/filter/pagination, `/:id/stock`, `/:id/transactions`, `/alerts/low-stock` |
 | Customers | `/api/customers` | CRUD + search |
@@ -77,7 +77,7 @@ See `backend/.env.example`. Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECR
 | Departments | `/api/departments` | CRUD (HR/Admin) |
 | Employees | `/api/employees` | CRUD (HR/Admin), field-level salary visibility |
 | Dashboard | `/api/dashboard` | summary, sales-trend, category-sales, top-products |
-| Documents | `/api/documents` | S3 upload, metadata list, presigned download URL (owner-scoped) |
+| Documents | `/api/documents` | S3 upload, metadata list, presigned download URL (owner-scoped), delete |
 
 Full request/response examples and per-phase Postman test suites: `PHASE-1-GUIDE.md` … `PHASE-6-GUIDE.md`.
 

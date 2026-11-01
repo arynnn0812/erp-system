@@ -26,5 +26,6 @@ router.post(
 );
 router.get('/', listRules, validate, ctrl.list);
 router.get('/:id/url', idRule, validate, ctrl.downloadUrl);
+router.delete('/:id', authorize('ADMIN', 'HR', 'MANAGER'), idRule, validate, ctrl.remove);
 
 module.exports = router;

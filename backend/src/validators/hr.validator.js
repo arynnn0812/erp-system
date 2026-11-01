@@ -6,7 +6,7 @@ const departmentRules = [
 
 const employeeRules = [
   body('name').trim().notEmpty().withMessage('Name is required').isLength({ max: 100 }),
-  body('email').trim().isEmail().withMessage('Valid email required').normalizeEmail(),
+  body('email').trim().isEmail().withMessage('Valid email required').toLowerCase(),
   body('departmentId').isInt({ min: 1 }).withMessage('departmentId required').toInt(),
   body('designation').trim().notEmpty().withMessage('Designation is required').isLength({ max: 100 }),
   body('joiningDate').isDate().withMessage('joiningDate must be YYYY-MM-DD'),

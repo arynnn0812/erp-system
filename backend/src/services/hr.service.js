@@ -2,6 +2,7 @@
 const departmentModel = require('../models/department.model');
 const employeeModel = require('../models/employee.model');
 const userModel = require('../models/user.model');
+const documentModel = require('../models/document.model');
 const ApiError = require('../utils/ApiError');
 const audit = require('../utils/audit');
 
@@ -88,6 +89,12 @@ async function updateEmployee(id, data, actor, ip) {
 }
 
 async function deleteEmployee(id, actor, ip) {
+  // documents.owner_id has no foreign key (it is polymorphic), so the database
+  // would happily orphan this employee's files. Make the caller decide first.
+  const docs = await documentModel.countByOwner('EMPLOYEE', id);
+  if (docs > 0) {
+    throw new ApiError(409, `Employee has ${docs} document(s); delete them before deleting the employee`);
+  }
   const ok = await employeeModel.remove(id);
   if (!ok) throw new ApiError(404, 'Employee not found');
   await audit({ userId: actor.id, action: 'EMPLOYEE_DELETE', entity: 'employees', entityId: Number(id), ip });

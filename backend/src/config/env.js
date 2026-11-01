@@ -26,11 +26,29 @@ function parseTrustProxy(raw) {
   return Number.isNaN(n) ? raw : n; // allow 'loopback' or an IP/CIDR list
 }
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+
+// A short secret makes HS256 tokens brute-forceable offline. Refuse to start
+// in production with one (generate: openssl rand -base64 48).
+if (nodeEnv === 'production' && process.env.JWT_SECRET.length < 32) {
+  throw new Error('JWT_SECRET must be at least 32 characters in production');
+}
+
+const int = (raw, fallback) => {
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? fallback : n;
+};
+
 module.exports = {
   port: parseInt(process.env.PORT, 10) || 4000,
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  logLevel: process.env.LOG_LEVEL || (nodeEnv === 'test' ? 'silent' : 'info'),
+  rateLimit: {
+    apiMax: int(process.env.API_RATE_LIMIT_MAX, 300),   // requests / minute / IP
+    loginMax: int(process.env.LOGIN_RATE_LIMIT_MAX, 10), // failed logins / 15 min / IP
+  },
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '1d',

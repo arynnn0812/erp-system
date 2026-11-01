@@ -3,17 +3,13 @@
 // wrong type.
 const multer = require('multer');
 const ApiError = require('../utils/ApiError');
-
-const ALLOWED_MIME = [
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-];
+// PDF, PNG, JPEG, .docx. The declared type is checked here (cheap, early);
+// the file's actual bytes are checked against it in document.service.js.
+const { ALLOWED_MIME } = require('../utils/fileSignature');
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 5 }, // 5 MB, one file
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_MIME.includes(file.mimetype)) {
       return cb(new ApiError(400, `File type not allowed: ${file.mimetype}`));

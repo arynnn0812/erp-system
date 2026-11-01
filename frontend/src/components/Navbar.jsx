@@ -31,7 +31,7 @@ export default function Navbar() {
       <div className="nav-user">
         <span className="badge">{user.role}</span>
         <span>{user.name}</span>
-        <button className="btn btn-ghost" onClick={() => { logout(); navigate('/login'); }}>
+        <button className="btn btn-ghost" onClick={async () => { await logout(); navigate('/login'); }}>
           Logout
         </button>
       </div>

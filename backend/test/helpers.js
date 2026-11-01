@@ -49,7 +49,9 @@ function api(token) {
     const r = request(app)[method](url);
     return token ? r.set('Authorization', `Bearer ${token}`) : r;
   };
-  return { get: wrap('get'), post: wrap('post'), put: wrap('put'), delete: wrap('delete') };
+  return {
+    get: wrap('get'), post: wrap('post'), put: wrap('put'), patch: wrap('patch'), delete: wrap('delete'),
+  };
 }
 
 // Small fixtures used across files.

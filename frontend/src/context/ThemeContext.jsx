@@ -31,6 +31,15 @@ export function ThemeProvider({ children }) {
     return () => media.removeEventListener('change', onChange);
   }, [pref]);
 
+  // Always print on white: switch to light for the print dialog, then back.
+  useEffect(() => {
+    const before = () => apply('light');
+    const after = () => apply(theme);
+    window.addEventListener('beforeprint', before);
+    window.addEventListener('afterprint', after);
+    return () => { window.removeEventListener('beforeprint', before); window.removeEventListener('afterprint', after); };
+  }, [theme]);
+
   function setPref(next) {
     try { localStorage.setItem(KEY, next); } catch { /* private mode: still works for this tab */ }
     const t = resolve(next);

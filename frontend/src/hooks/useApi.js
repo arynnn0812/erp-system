@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import api, { errMsg } from '../api/axios.js';
 
 // GET a single resource: const { data, loading, error, reload } = useApi('/departments')
+// (For a paged endpoint, `data` is the first page's rows.)
 // Pass null as the url to skip the request (e.g. a role that may not call it).
 export function useApi(url, params) {
   const [nonce, setNonce] = useState(0);
@@ -19,7 +20,7 @@ export function useApi(url, params) {
     let stale = false;
     const [u, p] = JSON.parse(reqKey);
     api.get(u, { params: p })
-      .then((r) => { if (!stale) setResult({ key: reqKey, data: r.data.data, error: '' }); })
+      .then((r) => { if (!stale) setResult({ key: reqKey, data: r.data.data ?? r.data.rows, error: '' }); })
       .catch((e) => { if (!stale) setResult((prev) => ({ ...prev, key: reqKey, error: errMsg(e) })); });
     return () => { stale = true; };
   }, [reqKey]);
@@ -33,7 +34,10 @@ export function useApi(url, params) {
 //   const list = usePagedList('/products', { search });
 //   list.rows, list.page, list.pages, list.total, list.loading, list.setPage(n), list.reload()
 export function usePagedList(url, params = {}, { limit = 10 } = {}) {
-  const filterKey = JSON.stringify(params);
+  // Empty filters are left out of the query string ("status=" would fail validation).
+  const filterKey = JSON.stringify(Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined)
+  ));
   const [pageState, setPageState] = useState({ filterKey, page: 1 });
   const page = pageState.filterKey === filterKey ? pageState.page : 1;
   const [nonce, setNonce] = useState(0);

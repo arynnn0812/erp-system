@@ -29,5 +29,6 @@ router.post('/logout', ctrl.logout); // clearing a cookie needs no valid session
 router.post('/logout-all', authenticate, ctrl.logoutAll);
 router.post('/change-password', authenticate, loginLimiter, changePasswordRules, validate, ctrl.changePassword);
 router.get('/me', authenticate, ctrl.me);
+router.get('/profile', authenticate, ctrl.profile);
 
 module.exports = router;

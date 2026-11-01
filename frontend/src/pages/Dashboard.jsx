@@ -6,28 +6,13 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useTheme } from '../context/ThemeContext.jsx';
 import { useApi } from '../hooks/useApi.js';
 import DataTable from '../components/ui/DataTable.jsx';
 import { Alert, Card, EmptyState, PageHeader, Skeleton, StatCard } from '../components/ui/index.jsx';
 import { inr, inrCompact, monthLabel } from '../utils/format.js';
+import { ChartTooltip, useChartColors } from '../components/ui/chart.jsx';
 
 const TREND_MONTHS = 6;
-
-// Recharts draws SVG attributes, which can't use var(); read the current
-// theme's token values instead (re-read whenever the theme changes).
-function useChartColors(theme) {
-  return useMemo(() => {
-    const css = getComputedStyle(document.documentElement);
-    const v = (name) => css.getPropertyValue(name).trim();
-    return {
-      series: [1, 2, 3, 4, 5, 6].map((i) => v(`--chart-${i}`)),
-      grid: v('--chart-grid'),
-      axis: v('--muted'),
-      surface: v('--surface'),
-    };
-  }, [theme]); // eslint-disable-line react-hooks/exhaustive-deps
-}
 
 // The API only returns months that had sales; fill the gaps with zero so the
 // chart's x-axis is continuous.
@@ -45,16 +30,6 @@ function fillMonths(rows, months) {
   return out;
 }
 
-function ChartTooltip({ active, payload, label, labelFormat = (l) => l }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="chart-tooltip">
-      <div className="muted">{labelFormat(label ?? payload[0].name)}</div>
-      <strong className="num">{inr(payload[0].value)}</strong>
-    </div>
-  );
-}
-
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -62,8 +37,7 @@ function greeting() {
 
 export default function Dashboard() {
   const { user, hasRole } = useAuth();
-  const { theme } = useTheme();
-  const colors = useChartColors(theme);
+  const colors = useChartColors();
   const seesSales = hasRole('ADMIN', 'MANAGER');
 
   const summary = useApi('/dashboard/summary');
@@ -111,7 +85,7 @@ export default function Dashboard() {
       {s.low_stock_count > 0 && (
         <Alert tone="warning">
           {s.low_stock_count} {s.low_stock_count === 1 ? 'product is' : 'products are'} below their reorder level.{' '}
-          <Link to="/inventory">Review inventory</Link>
+          {seesSales ? <Link to="/inventory/reorder">Open the reorder planner</Link> : <Link to="/inventory">Review inventory</Link>}
         </Alert>
       )}
 

@@ -1,6 +1,7 @@
 // Inventory page: server-side search + pagination, create/edit modal,
 // stock in/out modal (write actions only for ADMIN/MANAGER).
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import api, { errMsg } from '../../api/axios.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApi, usePagedList } from '../../hooks/useApi.js';
@@ -79,7 +80,7 @@ export default function Products() {
   const columns = [
     {
       key: 'name', label: 'Product', primary: true,
-      render: (r) => <><span className="cell-strong">{r.name}</span><span className="cell-sub mono">{r.sku}</span></>,
+      render: (r) => <><Link to={`/inventory/${r.id}`} className="cell-strong">{r.name}</Link><span className="cell-sub mono">{r.sku}</span></>,
     },
     { key: 'category', label: 'Category' },
     { key: 'price', label: 'Price', align: 'right', render: (r) => <span className="num">{inrExact(r.price)}</span> },
@@ -102,6 +103,7 @@ export default function Products() {
   ];
 
   const noCategories = canWrite && categories.data && categories.data.length === 0;
+  const categoryLink = hasRole('ADMIN', 'MANAGER') && <Link to="/categories">Manage categories</Link>;
 
   return (
     <>
@@ -130,7 +132,7 @@ export default function Products() {
       {form && (
         <Modal title={form.id ? 'Edit product' : 'Add product'} size="lg" onClose={() => setForm(null)}>
           <Alert>{error}</Alert>
-          {noCategories && !form.id && <Alert tone="warning">Create a category first; every product needs one.</Alert>}
+          {noCategories && !form.id && <Alert tone="warning">Create a category first; every product needs one. {categoryLink}</Alert>}
           <form onSubmit={saveProduct}>
             <div className="form-grid">
               <Field label="Name" className="span-2">

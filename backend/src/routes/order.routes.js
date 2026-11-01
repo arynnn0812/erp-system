@@ -16,6 +16,8 @@ const salesRead = authorize('ADMIN', 'MANAGER');
 // Reports before /:id (route order - same trap as /alerts/low-stock)
 router.get('/reports/summary', salesRead, reportRules, validate, ctrl.summary);
 router.get('/reports/top-products', salesRead, reportRules, validate, ctrl.top);
+router.get('/reports/daily', salesRead, reportRules, validate, ctrl.daily);
+router.get('/reports/export', salesRead, reportRules, validate, ctrl.exportCsv);
 
 router.get('/', salesRead, orderListRules, validate, ctrl.list);
 router.get('/:id', salesRead, idRule, validate, ctrl.getOne);

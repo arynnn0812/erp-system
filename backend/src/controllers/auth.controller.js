@@ -2,6 +2,7 @@
 // No business logic, no SQL.
 const authService = require('../services/auth.service');
 const userModel = require('../models/user.model');
+const employeeModel = require('../models/employee.model');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { setSessionCookie, clearSessionCookie } = require('../utils/cookies');
@@ -53,4 +54,16 @@ const me = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: user });
 });
 
-module.exports = { register, login, logout, logoutAll, changePassword, me };
+// GET /api/auth/profile  (authenticated) - the signed-in user plus the HR
+// record linked to their login, if any. People always see their own salary;
+// field-level hiding applies to other people's records, not your own.
+const profile = asyncHandler(async (req, res) => {
+  const user = await userModel.findById(req.user.id);
+  if (!user) throw new ApiError(404, 'User not found');
+  const link = await employeeModel.findByUserId(req.user.id);
+  // findById picks columns by role; 'ADMIN' here just means "include salary".
+  const employee = link ? await employeeModel.findById(link.id, 'ADMIN') : null;
+  res.status(200).json({ success: true, data: { user, employee } });
+});
+
+module.exports = { register, login, logout, logoutAll, changePassword, me, profile };

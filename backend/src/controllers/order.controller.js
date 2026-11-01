@@ -2,6 +2,7 @@ const orderModel = require('../models/order.model');
 const orderService = require('../services/order.service');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const { toCsv } = require('../utils/csv');
 
 // GET /api/orders?from=&to=&status=&customerId=&page=&limit=
 const list = asyncHandler(async (req, res) => {
@@ -52,4 +53,24 @@ const top = asyncHandler(async (req, res) => {
   res.json({ success: true, data });
 });
 
-module.exports = { list, getOne, create, cancel, summary, top };
+// GET /api/orders/reports/daily?from=&to=
+const daily = asyncHandler(async (req, res) => {
+  const data = await orderModel.salesByDay(req.query);
+  res.json({ success: true, data });
+});
+
+// GET /api/orders/reports/export?from=&to=  -> orders-<from>-to-<to>.csv
+const exportCsv = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const rows = await orderModel.exportRows({ from, to });
+  const csv = toCsv(rows, [
+    ['id', 'Order #'], ['order_date', 'Date'], ['status', 'Status'], ['customer', 'Customer'],
+    ['created_by', 'Created by'], ['units', 'Units'], ['subtotal', 'Subtotal'], ['tax', 'Tax'],
+    ['discount', 'Discount'], ['grand_total', 'Total'],
+  ]);
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="orders-${from}-to-${to}.csv"`);
+  res.send(`\uFEFF${csv}`); // BOM so Excel opens UTF-8 (₹, accented names) correctly
+});
+
+module.exports = { list, getOne, create, cancel, summary, top, daily, exportCsv };

@@ -18,6 +18,7 @@ const departmentRoutes = require('./routes/department.routes');
 const employeeRoutes = require('./routes/employee.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const documentRoutes = require('./routes/document.routes');
+const auditRoutes = require('./routes/audit.routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const requestLogger = require('./middleware/requestLogger');
 const logger = require('./utils/logger');
@@ -65,6 +66,7 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/audit-logs', auditRoutes);
 
 // --- 404 + centralized error handler (must be LAST) ---
 app.use(notFound);

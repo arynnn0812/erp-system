@@ -4,13 +4,11 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { navFor, titleFor } from '../../config/nav.js';
+import { navFor, titleFor, ROLE_LABEL } from '../../config/nav.js';
 import Icon from '../ui/Icon.jsx';
 import { Skeleton } from '../ui/index.jsx';
 import ThemeSwitch from './ThemeSwitch.jsx';
 import ErrorBoundary from './ErrorBoundary.jsx';
-
-const ROLE_LABEL = { ADMIN: 'Administrator', HR: 'HR', MANAGER: 'Manager', EMPLOYEE: 'Employee' };
 
 const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 
@@ -68,7 +66,7 @@ export default function AppShell() {
             <div key={section.section} className="nav-section">
               <div className="nav-section-title">{section.section}</div>
               {section.items.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.to === '/'} className="nav-link">
+                <NavLink key={item.to} to={item.to} end={item.to === '/' || item.end} className="nav-link">
                   <Icon name={item.icon} />
                   {item.label}
                 </NavLink>
@@ -76,13 +74,13 @@ export default function AppShell() {
             </div>
           ))}
         </nav>
-        <div className="sidebar-user">
+        <NavLink to="/profile" className="sidebar-user" title="My profile">
           <span className="avatar" aria-hidden="true">{initials(user.name)}</span>
           <div style={{ minWidth: 0 }}>
             <div className="sidebar-user-name">{user.name}</div>
             <div className="sidebar-user-role">{ROLE_LABEL[user.role] || user.role}</div>
           </div>
-        </div>
+        </NavLink>
       </aside>
       <div className={`sidebar-backdrop${open ? ' open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
 

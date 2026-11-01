@@ -11,9 +11,10 @@ import Field from '../../components/ui/Field.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { useConfirm } from '../../components/ui/ConfirmDialog.jsx';
 import { Alert, Badge, Card, PageHeader, SearchInput } from '../../components/ui/index.jsx';
+import DocumentsPanel from '../../components/DocumentsPanel.jsx';
 import { inr, dateFmt, dateLong } from '../../utils/format.js';
 
-const EMPTY = { name: '', email: '', departmentId: '', designation: '', joiningDate: '', salary: '' };
+const EMPTY = { name: '', email: '', departmentId: '', designation: '', joiningDate: '', salary: '', userId: '' };
 
 export default function Employees() {
   const { hasRole } = useAuth();
@@ -25,6 +26,9 @@ export default function Employees() {
   const [search, setSearch] = useState('');
   const list = usePagedList('/employees', { search });
   const departments = useApi(canWrite ? '/departments' : null);
+  // Linking an HR record to a login is ADMIN-only: only ADMIN may list users.
+  const users = useApi(hasRole('ADMIN') ? '/users' : null);
+  const [docsFor, setDocsFor] = useState(null); // employee whose documents are open
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,6 +39,9 @@ export default function Employees() {
     e.preventDefault();
     setError(''); setBusy(true);
     const body = { ...form, departmentId: Number(form.departmentId), salary: Number(form.salary) };
+    // Only ADMIN sees the login field; for HR leave userId out so the link is kept.
+    if (hasRole('ADMIN')) body.userId = form.userId ? Number(form.userId) : null;
+    else delete body.userId;
     try {
       if (form.id) await api.put(`/employees/${form.id}`, body);
       else await api.post('/employees', body);
@@ -69,7 +76,8 @@ export default function Employees() {
         <div className="row-end">
           <Button size="sm" variant="ghost" collapse icon="edit" onClick={() => openForm({ id: r.id, name: r.name, email: r.email,
             departmentId: r.department_id, designation: r.designation,
-            joiningDate: dateFmt(r.joining_date), salary: r.salary })}>Edit</Button>
+            joiningDate: dateFmt(r.joining_date), salary: r.salary, userId: r.user_id ?? '' })}>Edit</Button>
+          <Button size="sm" variant="ghost" collapse icon="file" onClick={() => setDocsFor(r)}>Documents</Button>
           {hasRole('ADMIN') && (
             <Button size="sm" variant="ghost-danger" iconOnly icon="trash" aria-label={`Delete ${r.name}`} title="Delete" onClick={() => remove(r)} />
           )}
@@ -129,12 +137,29 @@ export default function Employees() {
                 <input type="number" min="0" step="1" inputMode="numeric" value={form.salary}
                        onChange={(e) => setForm({ ...form, salary: e.target.value })} required />
               </Field>
+              {hasRole('ADMIN') && (
+                <Field label="Login account" optional className="span-2"
+                       hint="Linking lets this person see their own record and documents under My profile.">
+                  <select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>
+                    <option value="">Not linked</option>
+                    {(users.data || [])
+                      .filter((u) => !u.employee_id || u.employee_id === form.id)
+                      .map((u) => <option key={u.id} value={u.id}>{u.name} · {u.email}</option>)}
+                  </select>
+                </Field>
+              )}
             </div>
             <ModalFooter>
               <Button onClick={() => setForm(null)}>Cancel</Button>
               <Button type="submit" variant="primary" loading={busy}>{form.id ? 'Save changes' : 'Add employee'}</Button>
             </ModalFooter>
           </form>
+        </Modal>
+      )}
+
+      {docsFor && (
+        <Modal title={`Documents · ${docsFor.name}`} size="lg" onClose={() => setDocsFor(null)}>
+          <DocumentsPanel ownerType="EMPLOYEE" ownerId={docsFor.id} canWrite title="Employee documents" />
         </Modal>
       )}
     </>

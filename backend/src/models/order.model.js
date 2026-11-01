@@ -84,4 +84,34 @@ async function topProducts({ from, to, limit = 5 }) {
   return rows;
 }
 
-module.exports = { list, findById, salesSummary, topProducts };
+// Revenue per day in the range (days without sales are omitted; the client
+// fills the gaps so the chart axis stays continuous).
+async function salesByDay({ from, to }) {
+  const [rows] = await pool.execute(
+    `SELECT order_date AS day, COUNT(*) AS orders, SUM(grand_total) AS revenue
+     FROM orders
+     WHERE status = 'CONFIRMED' AND order_date BETWEEN ? AND ?
+     GROUP BY order_date
+     ORDER BY order_date`,
+    [from, to]
+  );
+  return rows;
+}
+
+// Every order in the range (both statuses) for CSV export, oldest first.
+async function exportRows({ from, to }) {
+  const [rows] = await pool.execute(
+    `SELECT o.id, o.order_date, o.status, c.name AS customer, u.name AS created_by,
+            (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = o.id) AS units,
+            o.subtotal, o.tax, o.discount, o.grand_total
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     JOIN users u ON u.id = o.created_by
+     WHERE o.order_date BETWEEN ? AND ?
+     ORDER BY o.order_date, o.id`,
+    [from, to]
+  );
+  return rows;
+}
+
+module.exports = { list, findById, salesSummary, topProducts, salesByDay, exportRows };

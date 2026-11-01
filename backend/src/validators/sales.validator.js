@@ -28,15 +28,24 @@ const pageRules = [
 const orderListRules = [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }), // cap page size
-  query('customerId').optional().isInt({ min: 1 }),
+  query('customerId').optional().isInt({ min: 1 }).toInt(),
   query('status').optional().isIn(['PENDING', 'CONFIRMED', 'CANCELLED']),
   query('from').optional().isDate().withMessage('from must be YYYY-MM-DD'),
   query('to').optional().isDate().withMessage('to must be YYYY-MM-DD'),
 ];
 
+// A report covers at most about a year: enough for any real question, and it
+// bounds the work one request can ask of the database (and the CSV size).
+const MAX_REPORT_DAYS = 366;
 const reportRules = [
   query('from').isDate().withMessage('from date required (YYYY-MM-DD)'),
-  query('to').isDate().withMessage('to date required (YYYY-MM-DD)'),
+  query('to').isDate().withMessage('to date required (YYYY-MM-DD)')
+    .custom((to, { req }) => {
+      const days = (Date.parse(to) - Date.parse(req.query.from)) / 86400000;
+      if (days < 0) throw new Error('to must be on or after from');
+      if (days > MAX_REPORT_DAYS) throw new Error(`a report can cover at most ${MAX_REPORT_DAYS} days`);
+      return true;
+    }),
   query('limit').optional().isInt({ min: 1, max: 50 }), // top-products row cap
 ];
 

@@ -28,6 +28,12 @@ const listRules = [
   query('categoryId').optional().isInt({ min: 1 }),
 ];
 
+const reorderRules = [
+  query('days').optional().isInt({ min: 7, max: 365 }).withMessage('days must be 7-365').toInt(),
+  query('cover').optional().isInt({ min: 1, max: 365 }).withMessage('cover must be 1-365').toInt(),
+  query('leadTime').optional().isInt({ min: 0, max: 180 }).withMessage('leadTime must be 0-180').toInt(),
+];
+
 const idRule = [param('id').isInt({ min: 1 }).withMessage('id must be a positive integer')];
 
-module.exports = { categoryRules, productRules, stockRules, listRules, idRule };
+module.exports = { categoryRules, productRules, stockRules, listRules, idRule, reorderRules };

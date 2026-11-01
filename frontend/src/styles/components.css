@@ -292,3 +292,60 @@ body.modal-open { overflow: hidden; }
 }
 .table .cell-primary { min-width: 160px; }
 @media (max-width: 1200px) { .table th, .table td { padding-left: 12px; padding-right: 12px; } }
+
+/* ---------- filter bars ---------- */
+.toolbar.filters { justify-content: flex-start; }
+.toolbar.filters .select { width: auto; min-width: 150px; height: var(--control-h-sm); font-size: var(--text-sm); }
+.toolbar.filters .toolbar-meta { margin-left: auto; }
+.inline-field { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--muted); }
+.inline-field .input { width: auto; height: var(--control-h-sm); font-size: var(--text-sm); padding: 0 8px; }
+@media (max-width: 640px) {
+  .toolbar.filters .select, .inline-field { flex: 1 1 140px; }
+  .inline-field .input { flex: 1; }
+}
+
+/* ---------- detail pages ---------- */
+.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-sm); color: var(--muted); margin-bottom: 4px; }
+.back-link:hover { color: var(--text); text-decoration: none; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-4); }
+.detail-grid dt { font-size: var(--text-xs); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.detail-grid dd { margin: 2px 0 0; font-weight: 550; }
+
+/* ---------- invoice ---------- */
+.invoice { max-width: 860px; padding: var(--sp-8); }
+.invoice-head { display: flex; justify-content: space-between; gap: var(--sp-4); padding-bottom: var(--sp-5); border-bottom: 1px solid var(--border); }
+.invoice-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: var(--text-lg); }
+.invoice-meta { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.invoice-number { font-size: var(--text-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
+.invoice-void { margin-top: var(--sp-4); padding: 10px 12px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-weight: 600; font-size: var(--text-sm); }
+.invoice-parties { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-6); padding: var(--sp-5) 0; color: var(--text-2); font-size: var(--text-sm); line-height: 1.6; }
+.invoice-label { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+.invoice-items { border: 1px solid var(--border); border-radius: var(--radius); }
+.invoice-totals { margin-left: auto; width: min(320px, 100%); padding-top: var(--sp-4); }
+@media (max-width: 560px) {
+  .invoice { padding: var(--sp-5); }
+  .invoice-head, .invoice-parties { grid-template-columns: 1fr; flex-direction: column; }
+  .invoice-meta { text-align: left; align-items: flex-start; }
+}
+@media print {
+  .invoice { max-width: none; border: none; padding: 0; }
+  .invoice a { color: inherit; }
+  .invoice .badge { border: 1px solid #999; }
+}
+.segmented-text button { width: auto; padding: 0 10px; font-size: var(--text-sm); font-weight: 500; white-space: nowrap; }
+.report-controls .toolbar { border-bottom: none; }
+@media (max-width: 640px) { .segmented-text { overflow-x: auto; max-width: 100%; } }
+
+/* ---------- documents ---------- */
+.doc-list { list-style: none; padding: 0; margin: 0; }
+.doc-list li { display: flex; align-items: center; gap: var(--sp-3); padding: 10px var(--sp-5); border-bottom: 1px solid var(--border); }
+.doc-list li:last-child { border-bottom: none; }
+.doc-icon { flex: none; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); }
+.doc-name { flex: 1; min-width: 0; }
+.doc-name .cell-strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-name .cell-sub { display: block; font-size: var(--text-xs); color: var(--muted); }
+.text-warning { color: var(--warning); font-weight: 600; }
+.card-foot-note { padding: var(--sp-3) var(--sp-5) var(--sp-4); border-top: 1px solid var(--border); font-size: var(--text-xs); color: var(--muted); line-height: 1.6; }
+.inline-field.check { gap: 8px; color: var(--text-2); cursor: pointer; }
+.inline-field.check input { width: 16px; height: 16px; accent-color: var(--primary); }
+.json-block { margin: 0; padding: var(--sp-4); border-radius: 8px; background: var(--surface-2); font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow: auto; }

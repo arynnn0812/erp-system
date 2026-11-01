@@ -22,7 +22,7 @@ export default function Button({
   return (
     <button
       type={type} className={cls} disabled={disabled || loading} aria-busy={loading || undefined}
-      title={collapse && typeof children === 'string' ? children : undefined} {...rest}
+      {...rest} title={rest.title ?? (collapse && typeof children === 'string' ? children : undefined)}
     >
       {loading ? <span className="spinner" aria-hidden="true" /> : icon && <Icon name={icon} size={size === 'sm' ? 15 : 17} />}
       {collapse ? <span className="btn-text">{children}</span> : children}

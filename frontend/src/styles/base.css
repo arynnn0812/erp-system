@@ -69,3 +69,4 @@ h3 { font-size: var(--text-lg); }
   .card { box-shadow: none; border-color: #ccc; }
 }
 @media (max-width: 480px) { .hide-xs { display: none; } }
+@media (max-width: 560px) { .hide-sm { display: none; } }

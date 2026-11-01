@@ -4,8 +4,8 @@ Ordered by value: first make what exists **correct**, then **safe**, then
 **complete**, then **pleasant**, then **shippable**. Each phase ends with the
 test suite green and both apps building.
 
-**Status:** Phases 0, 1, 2 and 4 are done. Phase 4 was built before Phase 3
-so the new feature pages are written once, on the finished design system.
+**Status:** Phases 0–4 are done. Phase 4 was built before Phase 3 so the new
+feature pages were written once, on the finished design system.
 
 Guiding rules: keep the existing architecture (it is sound), add a dependency
 only when it replaces real hand-written risk, and never claim a feature,
@@ -41,7 +41,7 @@ Each fix lands with a regression test.
 - Uploads: verify file type from magic bytes, clean up S3 on DB failure, delete endpoint.
 - Structured logging (pino) with request IDs, graceful shutdown.
 
-## Phase 3 — Missing & advanced features
+## Phase 3 — Missing & advanced features ✅
 Backend endpoints that already exist get a UI; a few high-value additions.
 - Categories management (currently blocks creating products on a fresh install).
 - User management (create, change role, deactivate) for ADMIN.

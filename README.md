@@ -14,6 +14,9 @@ A production-style ERP for small/medium businesses: **inventory, sales/finance, 
 - **HR** — departments and employees, HR/Admin-only management, field-level access (managers never receive salary data), audited salary changes.
 - **Dashboard** — role-aware summary counters, monthly sales trend, category-wise sales, top sellers; all aggregation in SQL.
 - **Documents** — uploads to a private S3 bucket (5MB cap, type verified from the file's magic bytes, not just the client's claim), metadata in MySQL, 5-minute presigned download URLs, S3 cleanup when the database write fails, delete endpoint. Employee documents are readable only by ADMIN, HR, or the employee themselves; product documents by any authenticated user. Every presigned URL issued is audited.
+- **Reorder planner** — per product: units sold over a chosen window, sales per day, days of stock left and a suggested order quantity (cover period of demand + reorder level as safety stock − on hand), all computed in SQL from confirmed orders; flags items that are out, below their reorder level, or will run out within the supplier lead time.
+- **Reports** — date-range sales report (revenue, orders, average order value, revenue per day, best sellers) and CSV export of every order in the range, with spreadsheet-formula injection neutralised. Orders list filters by status, customer and date; each order opens as a printable invoice (Print / Save as PDF).
+- **Administration & self-service** — user management (create, change role, deactivate, reset password), read-only audit log viewer, categories management, per-product stock history, documents on products and employees, and a "My profile" page for every role (own HR record and documents, change password, sign out everywhere).
 - **UI** — responsive React SPA built on a small in-house design system (CSS design tokens, no UI framework): light/dark/system themes, sidebar layout with a mobile drawer, accessible dialogs (focus trap, Esc, focus restore), toasts and confirm dialogs, skeleton loading, empty and error states, tables that become labelled cards on phones, debounced search, per-page error boundary, and route-level code splitting.
 - **Cross-cutting** — centralized error handling (constraint violations mapped to 409/400), express-validator validation and sanitization, parameterized queries everywhere, Helmet + locked-down CORS, API-wide rate limit, structured JSON logging (pino) with request IDs and secret redaction, graceful shutdown, append-only audit log (including logins and failed logins), health check with DB ping.
 
@@ -39,7 +42,9 @@ cd backend
 npm install
 cp .env.example .env        # fill in DB credentials and JWT secret; AWS optional
 npm run migrate             # creates the database and applies database/migrations/*.sql
-npm run seed                # demo users for all 4 roles (password: Password@123)
+npm run seed:demo           # demo users for all 4 roles (password: Password@123)
+                            # + six months of demo trading data
+                            # (or `npm run seed` for the users only)
 npm run dev                 # http://localhost:4000 (restarts on file changes)
 
 # frontend (second terminal)
@@ -57,6 +62,14 @@ Health check: `GET http://localhost:4000/api/health`
 
 Demo accounts: `admin@erp.com`, `hr@erp.com`, `manager@erp.com`, `employee@erp.com`.
 
+`npm run seed:demo` adds a small IT-equipment distributor's last six months:
+departments and employees (each demo login linked to an HR record), 17 products
+in 6 categories, 10 customers and about 140 orders with a few cancellations and a
+mid-period restock. It goes through the same services as the API, so every
+product's stock is explained by its ledger (the script checks this), and it is
+deterministic: every run produces the same history. It only runs on a database
+with no products.
+
 ## Environment variables
 
 See `backend/.env.example`. Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECRET`. Optional: `AWS_REGION` + `S3_BUCKET_NAME` (document endpoints return 503 with a clear message when unset). On EC2, prefer an IAM instance role over access keys.
@@ -67,22 +80,23 @@ Frontend: `API_URL` (Vite dev proxy target, default `http://localhost:4000`) and
 
 **`TRUST_PROXY`** — set to `1` whenever the API runs behind nginx or a load balancer. Left at `0`, Express reports the proxy's address as `req.ip`, which collapses the login rate limiter into a single shared bucket for all users and writes the proxy IP into every audit log row.
 
-## API overview (40+ endpoints)
+## API overview (45+ endpoints)
 
 | Area | Base path | Highlights |
 |---|---|---|
-| Auth | `/api/auth` | login (rate-limited), register (admin-only), me, logout, logout-all, change-password |
+| Auth | `/api/auth` | login (rate-limited), register (admin-only), me, profile (own HR record), logout, logout-all, change-password |
 | Users | `/api/users` | list, change role / activate / deactivate, reset password (admin) |
 | Categories | `/api/categories` | CRUD, FK-protected delete |
-| Products | `/api/products` | CRUD, search/filter/pagination, `/:id/stock`, `/:id/transactions`, `/alerts/low-stock` |
+| Products | `/api/products` | CRUD, search/filter/pagination, `/:id/stock`, `/:id/transactions` (paged ledger with running balance), `/alerts/low-stock`, `/insights/reorder` |
 | Customers | `/api/customers` | CRUD + search |
-| Orders | `/api/orders` | ADMIN/MANAGER only; create (atomic), cancel (restock), `/reports/summary`, `/reports/top-products` |
+| Orders | `/api/orders` | ADMIN/MANAGER only; create (atomic), cancel (restock), filters (status, customer, dates), `/reports/summary`, `/reports/daily`, `/reports/top-products`, `/reports/export` (CSV) |
 | Departments | `/api/departments` | CRUD (HR/Admin) |
 | Employees | `/api/employees` | CRUD (HR/Admin), field-level salary visibility |
 | Dashboard | `/api/dashboard` | summary, sales-trend, category-sales, top-products |
 | Documents | `/api/documents` | S3 upload, metadata list, presigned download URL (owner-scoped), delete |
+| Audit log | `/api/audit-logs` | ADMIN only, read-only; filter by action, user, dates; `/actions` |
 
-Full request/response examples and per-phase Postman test suites: `PHASE-1-GUIDE.md` … `PHASE-6-GUIDE.md`.
+Request/response behaviour is pinned down by the integration tests in `backend/test/`; an OpenAPI reference is planned (see `docs/ROADMAP.md`, Phase 6).
 
 ## Testing
 

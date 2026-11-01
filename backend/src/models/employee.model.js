@@ -26,7 +26,7 @@ async function list({ departmentId, search, page = 1, limit = 10 }, role) {
     `SELECT COUNT(*) AS total FROM employees e ${whereSql}`, params
   );
   const [rows] = await pool.execute(
-    `SELECT ${fields}
+    `SELECT ${fields}, e.user_id
      FROM employees e
      JOIN departments d ON d.id = e.department_id
      ${whereSql}

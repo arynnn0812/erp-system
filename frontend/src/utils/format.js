@@ -24,3 +24,33 @@ export function monthLabel(ym, withYear = false) {
   const [y, m] = String(ym).split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('en-IN', withYear ? { month: 'short', year: 'numeric' } : { month: 'short' });
 }
+
+// Local calendar date as YYYY-MM-DD (toISOString would use UTC and can be a day off).
+export function isoDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// "2026-07-14" -> "14 Jul" for chart axes.
+export function dayLabel(d) {
+  const [y, m, day] = String(d).slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+// Save a Blob as a file via a temporary object URL.
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// TIMESTAMP columns arrive as UTC ISO strings: format them in local time
+// (slicing the string would show the UTC date, a day off near midnight).
+export const tsDate = (ts) => (ts ? new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+export const tsDateTime = (ts) => (ts
+  ? new Date(ts).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  : '—');

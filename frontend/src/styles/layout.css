@@ -97,3 +97,6 @@
 
 /* full-page states */
 .page-center { min-height: 100vh; display: grid; place-items: center; padding: var(--sp-4); }
+a.sidebar-user { color: inherit; transition: background var(--dur) var(--ease); }
+a.sidebar-user:hover { background: var(--sidebar-hover); text-decoration: none; }
+a.sidebar-user.active { background: var(--sidebar-active); }

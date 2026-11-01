@@ -91,19 +91,28 @@ async function softDelete(id) {
   return result.affectedRows > 0;
 }
 
+// Stock ledger for one product, newest first, with the balance after each
+// movement (a running sum over the whole ledger, so it is right on every page).
 async function listTransactions(productId, { page = 1, limit = 20 }) {
   const offset = (page - 1) * limit;
+  const [[{ total }]] = await pool.execute(
+    'SELECT COUNT(*) AS total FROM inventory_transactions WHERE product_id = ?', [productId]
+  );
   const [rows] = await pool.execute(
-    `SELECT t.id, t.type, t.quantity, t.reference, t.created_at,
-            u.name AS performed_by
-     FROM inventory_transactions t
-     JOIN users u ON u.id = t.performed_by
-     WHERE t.product_id = ?
-     ORDER BY t.created_at DESC
+    `SELECT * FROM (
+       SELECT t.id, t.type, t.quantity, t.reference, t.created_at,
+              u.name AS performed_by,
+              SUM(CASE WHEN t.type = 'IN' THEN t.quantity ELSE -t.quantity END)
+                OVER (ORDER BY t.id) AS balance_after
+       FROM inventory_transactions t
+       JOIN users u ON u.id = t.performed_by
+       WHERE t.product_id = ?
+     ) ledger
+     ORDER BY id DESC
      LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
     [productId]
   );
-  return rows;
+  return { rows, total, page: Number(page), pages: Math.ceil(total / limit) };
 }
 
 async function listLowStock() {
@@ -116,7 +125,45 @@ async function listLowStock() {
   return rows;
 }
 
+// Reorder planning, computed in SQL from real order history.
+//   units_sold      confirmed units in the last `days` days (including today)
+//   daily_velocity  units_sold / days
+//   days_of_stock   how long current stock lasts at that pace (NULL = no sales)
+//   suggested_qty   enough to cover `cover` days of demand on top of the
+//                   reorder level (kept as safety stock), minus what is on hand
+// All three numbers are validated integers, interpolated like LIMIT elsewhere.
+async function reorderPlan({ days = 30, cover = 30 }) {
+  const d = Number(days);
+  const c = Number(cover);
+  const [rows] = await pool.query(
+    `SELECT p.id, p.name, p.sku, p.quantity, p.reorder_level, p.supplier, p.price,
+            c.name AS category,
+            COALESCE(s.units, 0)                                   AS units_sold,
+            ROUND(COALESCE(s.units, 0) / ${d}, 2)                  AS daily_velocity,
+            CASE WHEN COALESCE(s.units, 0) = 0 THEN NULL
+                 ELSE FLOOR(p.quantity / (s.units / ${d})) END     AS days_of_stock,
+            GREATEST(0, CEIL(COALESCE(s.units, 0) / ${d} * ${c}
+                             + p.reorder_level - p.quantity))      AS suggested_qty
+     FROM products p
+     JOIN categories c ON c.id = p.category_id
+     LEFT JOIN (
+       SELECT oi.product_id, SUM(oi.quantity) AS units
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       WHERE o.status = 'CONFIRMED'
+         AND o.order_date > DATE_SUB(CURDATE(), INTERVAL ${d} DAY)
+       GROUP BY oi.product_id
+     ) s ON s.product_id = p.id
+     WHERE p.is_active = TRUE
+     ORDER BY p.quantity = 0 DESC,
+              p.quantity < p.reorder_level DESC,
+              days_of_stock IS NULL, days_of_stock, p.name`
+  );
+  return rows;
+}
+
 module.exports = {
+  reorderPlan,
   list, findById, findBySku, create, update, softDelete,
   listTransactions, listLowStock,
 };

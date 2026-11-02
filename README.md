@@ -2,7 +2,9 @@
 
 A production-style ERP for small/medium businesses: **inventory, sales/finance, and HR** in one system, with role-based access control for Admin, HR, Manager, and Employee, a role-aware analytics dashboard, and AWS S3 document storage.
 
-**Stack:** React · Node.js/Express · MySQL · JWT · AWS EC2 + S3
+**Stack:** React · Node.js/Express · MySQL · JWT · AWS EC2 + S3 · Docker
+
+[![CI](https://github.com/arynnn0812/erp-system/actions/workflows/ci.yml/badge.svg)](https://github.com/arynnn0812/erp-system/actions/workflows/ci.yml)
 
 ---
 
@@ -18,7 +20,7 @@ A production-style ERP for small/medium businesses: **inventory, sales/finance, 
 - **Reports** — date-range sales report (revenue, orders, average order value, revenue per day, best sellers) and CSV export of every order in the range, with spreadsheet-formula injection neutralised. Orders list filters by status, customer and date; each order opens as a printable invoice (Print / Save as PDF).
 - **Administration & self-service** — user management (create, change role, deactivate, reset password), read-only audit log viewer, categories management, per-product stock history, documents on products and employees, and a "My profile" page for every role (own HR record and documents, change password, sign out everywhere).
 - **UI** — responsive React SPA built on a small in-house design system (CSS design tokens, no UI framework): light/dark/system themes, sidebar layout with a mobile drawer, accessible dialogs (focus trap, Esc, focus restore), toasts and confirm dialogs, skeleton loading, empty and error states, tables that become labelled cards on phones, debounced search, per-page error boundary, and route-level code splitting.
-- **Cross-cutting** — centralized error handling (constraint violations mapped to 409/400), express-validator validation and sanitization, parameterized queries everywhere, Helmet + locked-down CORS, API-wide rate limit, structured JSON logging (pino) with request IDs and secret redaction, graceful shutdown, append-only audit log (including logins and failed logins), health check with DB ping.
+- **Cross-cutting** — centralized error handling (constraint violations mapped to 409/400), express-validator validation and sanitization, parameterized queries everywhere, Helmet + locked-down CORS, API-wide rate limit, structured JSON logging (pino) with request IDs and secret redaction, graceful shutdown, append-only audit log (including logins and failed logins), liveness and readiness probes, and configuration validated at startup.
 
 ## Architecture
 
@@ -32,7 +34,21 @@ React SPA ──JSON/HTTPS──> Express API ──SQL pool──> MySQL (InnoD
 
 ## Getting started
 
-Prerequisites: Node 18+, MySQL 8.
+### With Docker (whole stack)
+
+```bash
+git clone https://github.com/arynnn0812/erp-system.git && cd erp-system
+cp .env.example .env        # set MYSQL_ROOT_PASSWORD, DB_PASSWORD, JWT_SECRET (openssl rand -base64 48)
+docker compose up -d --build --wait
+docker compose run --rm api node scripts/seed.js --demo   # demo logins + sample data
+```
+
+Open http://localhost:8080. MySQL, migrations, the API and nginx all run in
+containers; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production.
+
+### For development
+
+Prerequisites: Node 20.19+, MySQL 8.
 
 ```bash
 git clone https://github.com/arynnn0812/erp-system.git && cd erp-system
@@ -58,7 +74,7 @@ npm run dev                 # http://localhost:5173, proxies /api to the backend
 and baselined automatically. Schema changes go in a new numbered file in
 `database/migrations/`; never edit one that has been applied.
 
-Health check: `GET http://localhost:4000/api/health`
+Health checks: `GET /api/health/live` (process up) and `GET /api/health/ready` (database reachable; `/api/health` is an alias).
 
 Demo accounts: `admin@erp.com`, `hr@erp.com`, `manager@erp.com`, `employee@erp.com`.
 
@@ -72,7 +88,7 @@ with no products.
 
 ## Environment variables
 
-See `backend/.env.example`. Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECRET`. Optional: `AWS_REGION` + `S3_BUCKET_NAME` (document endpoints return 503 with a clear message when unset). On EC2, prefer an IAM instance role over access keys.
+See `backend/.env.example` (and `.env.example` at the root for Docker Compose). Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECRET`. The API checks the whole configuration at startup and lists every problem at once; the full table is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables-api). Optional: `AWS_REGION` + `S3_BUCKET_NAME` (document endpoints return 503 with a clear message when unset). On EC2, prefer an IAM instance role over access keys.
 
 Frontend: `API_URL` (Vite dev proxy target, default `http://localhost:4000`) and `VITE_SHOW_DEMO_ACCOUNTS=true` to list the seeded demo accounts on the sign-in page of a demo build (they are always listed in development, never otherwise).
 
@@ -110,7 +126,7 @@ DB_PASSWORD=yourpassword npm test     # DB_HOST/DB_PORT/DB_USER default to 127.0
 npm run lint
 ```
 
-Covered: login and role enforcement, field-level salary hiding, atomic order
+Covered: config validation and health probes, login and role enforcement, field-level salary hiding, atomic order
 creation and rollback, concurrent stock-outs (no oversell), cancel-and-restock,
 constraint errors mapped to 409/400, validation of query parameters, and
 regression tests for each bug fixed in the audit (see `docs/ROADMAP.md`).
@@ -123,28 +139,50 @@ regression tests for each bug fixed in the audit (see `docs/ROADMAP.md`).
 
 ## Deployment
 
-Summarized in `DEPLOYMENT-GUIDE.md`: Ubuntu EC2, Node via nvm, MySQL (RDS or local), pm2 process manager, nginx reverse proxy, environment variables via systemd/pm2 ecosystem file, S3 bucket with least-privilege IAM role.
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers both routes:
+
+- **Docker Compose** on one VM: MySQL, a one-shot migration step, the API and nginx. The images run as non-root users, and the API container is also read-only.
+- **Without Docker**: systemd (`deploy/erp-api.service`) and nginx.
+
+It also covers HTTPS, `TRUST_PROXY`, the first admin (`npm run create-admin`), backups and restore, logs, health checks, S3 and a go-live checklist.
+
+After any deploy, `scripts/smoke-test.sh https://your-host` checks the stack end to end.
+
+CI (`.github/workflows/ci.yml`) runs on every pull request:
+
+- lint and the integration tests against MySQL 8.4;
+- the frontend build;
+- `npm audit`;
+- a job that builds both images, starts the compose stack and runs the smoke test.
 
 ## Project structure
 
 ```
 erp-system/
+├── docker-compose.yml         # MySQL + migrate + API + web (nginx)
+├── .env.example               # settings for docker compose
+├── .github/workflows/ci.yml
+├── scripts/smoke-test.sh      # post-deploy check through the public URL
+├── deploy/erp-api.service     # systemd unit (non-Docker deploys)
 ├── database/migrations/       # versioned SQL, applied by `npm run migrate`
-├── docs/ROADMAP.md
+├── docs/                      # ROADMAP.md, DEPLOYMENT.md
 ├── backend/
-│   ├── scripts/  migrate.js  seed.js
+│   ├── Dockerfile
+│   ├── scripts/  migrate.js  seed.js  demo-data.js  create-admin.js
 │   ├── test/                  # Vitest + Supertest integration tests
 │   └── src/
 │       ├── app.js  server.js
-│       ├── config/     env.js  db.js  s3.js
+│       ├── config/     env.js  buildConfig.js (validation)  db.js  s3.js
 │       ├── middleware/ auth  roles  validate  upload  errorHandler  requestLogger
 │       ├── validators/ controllers/  services/  models/  routes/  utils/
-└── frontend/src/
-    ├── styles/                # tokens.css (themes), base, layout, components
-    ├── components/ui/         # Button, Field, Modal, Toast, ConfirmDialog, DataTable, …
-    ├── components/layout/     # AppShell (sidebar + top bar), ThemeSwitch, ErrorBoundary
-    ├── hooks/useApi.js        # useApi / usePagedList
-    ├── config/nav.js          # role access shared by the sidebar and route guards
-    ├── context/               # AuthContext, ThemeContext
-    └── pages/
+└── frontend/
+    ├── Dockerfile  nginx/default.conf.template
+    └── src/
+        ├── styles/                # tokens.css (themes), base, layout, components
+        ├── components/ui/         # Button, Field, Modal, Toast, ConfirmDialog, DataTable, …
+        ├── components/layout/     # AppShell (sidebar + top bar), ThemeSwitch, ErrorBoundary
+        ├── hooks/useApi.js        # useApi / usePagedList
+        ├── config/nav.js          # role access shared by the sidebar and route guards
+        ├── context/               # AuthContext, ThemeContext
+        └── pages/
 ```

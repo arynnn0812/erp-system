@@ -9,6 +9,7 @@
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "seed:demo": "node scripts/seed.js --demo",
+    "create-admin": "node scripts/create-admin.js",
     "test": "vitest run",
     "lint": "eslint ."
   },

@@ -50,7 +50,7 @@ app.use('/api', rateLimit({
   limit: config.rateLimit.apiMax,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  skip: (req) => req.path === '/health',
+  skip: (req) => req.path.startsWith('/health'), // probes run every few seconds
   message: { success: false, message: 'Too many requests, slow down' },
 }));
 

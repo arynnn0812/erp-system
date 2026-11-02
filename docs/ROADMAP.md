@@ -4,7 +4,7 @@ Ordered by value: first make what exists **correct**, then **safe**, then
 **complete**, then **pleasant**, then **shippable**. Each phase ends with the
 test suite green and both apps building.
 
-**Status:** Phases 0–4 are done. Phase 4 was built before Phase 3 so the new
+**Status:** Phases 0–5 are done. Phase 4 was built before Phase 3 so the new
 feature pages were written once, on the finished design system.
 
 Guiding rules: keep the existing architecture (it is sound), add a dependency
@@ -69,11 +69,19 @@ Backend endpoints that already exist get a UI; a few high-value additions.
 - Error boundary per page, 404 page, theme-aware charts, print styles,
   `prefers-reduced-motion`, route-level code splitting (initial JS 719 kB → 266 kB).
 
-## Phase 5 — Production readiness
+## Phase 5 — Production readiness ✅
 - Dockerfiles (API, frontend via nginx) + `docker-compose.yml` (MySQL, API, web).
-- GitHub Actions CI: lint, test against a MySQL service, build.
+  Non-root images; the API container is read-only with no Linux capabilities;
+  migrations run as a one-shot service before the API starts.
+- GitHub Actions CI: lint, test against a MySQL service, build, dependency
+  audit, and a job that starts the whole compose stack and smoke-tests it.
 - Health (liveness) vs readiness endpoints; env validation at startup.
-- Deployment guide (EC2 / any VM, nginx, pm2 or Docker), secrets guidance.
+  Readiness reports 503 while shutting down; the API retries MySQL at startup.
+- Deployment guide (`docs/DEPLOYMENT.md`: Docker Compose or a plain VM with
+  systemd + nginx, TLS, backups, secrets as files, go-live checklist),
+  `scripts/smoke-test.sh`, and `create-admin` for a first admin without the
+  demo accounts.
+- Strict Content-Security-Policy (the inline theme script became a file).
 
 ## Phase 6 — Documentation & presentation
 - README rewrite: overview, architecture diagram, feature tour, stack rationale, setup.

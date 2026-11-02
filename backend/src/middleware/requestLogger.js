@@ -22,7 +22,7 @@ module.exports = pinoHttp({
     if (res.statusCode >= 400) return 'warn';
     return 'info';
   },
-  autoLogging: { ignore: (req) => req.url === '/api/health' }, // probes would drown the log
+  autoLogging: { ignore: (req) => req.url.startsWith('/api/health') }, // probes would drown the log
   serializers: {
     req: (req) => ({ id: req.id, method: req.method, url: req.url }),
     res: (res) => ({ statusCode: res.statusCode }),

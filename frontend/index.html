@@ -6,15 +6,8 @@
     <meta name="description" content="ERP System - inventory, sales and HR in one place." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%234f7cff'/%3E%3Cstop offset='1' stop-color='%237c5cff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='21' text-anchor='middle' font-family='Arial' font-weight='700' font-size='13' fill='%23fff'%3EERP%3C/text%3E%3C/svg%3E" />
     <title>ERP System</title>
-    <!-- Apply the saved theme before first paint so the page never flashes the wrong one. -->
-    <script>
-      (function () {
-        var pref = 'system';
-        try { pref = localStorage.getItem('erp-theme') || 'system'; } catch (e) {}
-        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-      })();
-    </script>
+    <!-- Sets the theme before first paint (see the file for why it is not inline). -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <noscript>This application needs JavaScript enabled.</noscript>

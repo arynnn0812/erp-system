@@ -23,7 +23,7 @@ function cookieOptions(expiresAt) {
   return {
     httpOnly: true,
     sameSite: 'strict',
-    secure: config.nodeEnv === 'production',
+    secure: config.cookieSecure, // on in production unless COOKIE_SECURE=false
     path: '/api',
     ...(expiresAt && { expires: expiresAt }),
   };

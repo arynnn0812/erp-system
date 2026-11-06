@@ -1,0 +1,117 @@
+# Whole stack on one machine: MySQL, the API, and nginx serving the web app.
+#   cp .env.example .env        # fill in the passwords and JWT_SECRET
+#   docker compose up -d --build
+#   docker compose run --rm api node scripts/seed.js   # first run: demo logins
+# Then open http://localhost:8080. Details: docs/DEPLOYMENT.md
+name: erp
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "5" } # rotate, or a busy API fills the disk
+
+x-api-env: &api-env
+  NODE_ENV: production
+  PORT: 4000
+  DB_HOST: db
+  DB_PORT: 3306
+  DB_USER: ${DB_USER:-erp}
+  DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+  DB_NAME: ${DB_NAME:-erp_db}
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -base64 48)}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+  CLIENT_URL: ${PUBLIC_URL:-http://localhost:8080}
+  # nginx in the web container is one proxy. Add one per proxy in front of
+  # it (host nginx, load balancer): see docs/DEPLOYMENT.md.
+  TRUST_PROXY: ${TRUST_PROXY:-1}
+  COOKIE_SECURE: ${COOKIE_SECURE:-}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  AWS_REGION: ${AWS_REGION:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+
+x-api-build: &api-build
+  context: .
+  dockerfile: backend/Dockerfile
+
+# The API writes nothing to disk (uploads are streamed from memory to S3), so
+# its filesystem is read-only and it runs with no Linux capabilities.
+x-api-hardening: &api-hardening
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-erp_db}
+      MYSQL_USER: ${DB_USER:-erp}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/mysql
+    # Not published to the host: only the API reaches MySQL, over the
+    # compose network. TCP (127.0.0.1) so the check fails during the
+    # image's first-run init, which listens on a socket only.
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging: *logging
+
+  # One-shot: applies database/migrations, then exits. The API waits for it.
+  migrate:
+    build: *api-build
+    image: erp-api:local
+    command: ["node", "scripts/migrate.js"]
+    environment: *api-env
+    <<: *api-hardening
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+    logging: *logging
+
+  api:
+    build: *api-build
+    image: erp-api:local
+    restart: unless-stopped
+    environment: *api-env
+    <<: *api-hardening
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    # Readiness here (the image's own check is liveness): `web` starts only
+    # once the API can reach MySQL.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    logging: *logging
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: erp-web:local
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: api:4000
+    cap_drop: [ALL] # unprivileged nginx on port 8080 needs none
+    security_opt: [no-new-privileges:true]
+    # Bound to localhost by default: put TLS in front (host nginx, Caddy, a
+    # load balancer). WEB_BIND=0.0.0.0 exposes it directly.
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *logging
+
+volumes:
+  db-data:

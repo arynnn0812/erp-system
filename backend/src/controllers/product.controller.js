@@ -52,11 +52,12 @@ const adjustStock = asyncHandler(async (req, res) => {
 
 const transactions = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
-  const rows = await productModel.listTransactions(req.params.id, {
+  const result = await productModel.listTransactions(req.params.id, {
     page: Number(page),
     limit: Number(limit),
   });
-  res.json({ success: true, data: rows });
+  // `data` kept for existing clients; rows/total/pages match the other lists.
+  res.json({ success: true, data: result.rows, ...result });
 });
 
 const lowStock = asyncHandler(async (req, res) => {
@@ -64,4 +65,27 @@ const lowStock = asyncHandler(async (req, res) => {
   res.json({ success: true, count: rows.length, data: rows });
 });
 
-module.exports = { list, getOne, create, update, remove, adjustStock, transactions, lowStock };
+// GET /api/products/insights/reorder?days=30&cover=30&leadTime=7
+// status: OUT (none left), REORDER (below reorder level, or runs out within
+// the supplier lead time), OK.
+const reorder = asyncHandler(async (req, res) => {
+  const { days = 30, cover = 30, leadTime = 7 } = req.query;
+  const rows = await productModel.reorderPlan({ days, cover });
+  const data = rows.map((r) => {
+    const runsOut = r.days_of_stock !== null && Number(r.days_of_stock) < Number(leadTime);
+    let status = 'OK';
+    if (r.quantity === 0) status = 'OUT';
+    else if (r.quantity < r.reorder_level || runsOut) status = 'REORDER';
+    return {
+      ...r,
+      units_sold: Number(r.units_sold),
+      daily_velocity: Number(r.daily_velocity),
+      days_of_stock: r.days_of_stock === null ? null : Number(r.days_of_stock),
+      suggested_qty: Number(r.suggested_qty),
+      status,
+    };
+  });
+  res.json({ success: true, params: { days: Number(days), cover: Number(cover), leadTime: Number(leadTime) }, data });
+});
+
+module.exports = { reorder, list, getOne, create, update, remove, adjustStock, transactions, lowStock };

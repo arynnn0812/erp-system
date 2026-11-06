@@ -1,5 +1,5 @@
 // Global auth state via React Context: { user, login, logout, hasRole }.
-// On app load, if a token exists we call /auth/me to restore the session.
+// On app load we ask /auth/me who we are; the session cookie answers for us.
 import { createContext, useContext, useEffect, useState } from 'react';
 import api from '../api/axios.js';
 
@@ -10,25 +10,21 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true); // block routes until we know
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) { setLoading(false); return; }
+    localStorage.removeItem('token'); // left behind by versions that stored the JWT
     api.get('/auth/me')
       .then((res) => setUser(res.data.data))
-      .catch(() => localStorage.removeItem('token'))
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
   async function login(email, password) {
     const res = await api.post('/auth/login', { email, password });
-    const { token, user } = res.data.data;
-    localStorage.setItem('token', token);
-    setUser(user);
-    return user;
+    setUser(res.data.data.user); // the token itself stays in the httpOnly cookie
+    return res.data.data.user;
   }
 
-  function logout() {
-    api.post('/auth/logout').catch(() => {}); // stateless server; best-effort
-    localStorage.removeItem('token');
+  async function logout() {
+    await api.post('/auth/logout').catch(() => {}); // clears the cookie server-side
     setUser(null);
   }
 

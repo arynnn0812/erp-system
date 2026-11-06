@@ -15,6 +15,11 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   namedPlaceholders: true,
+  // DATE columns come back as 'YYYY-MM-DD' strings. Left as JS Dates, mysql2
+  // builds local midnight, JSON serialises it as UTC, and any server east of
+  // Greenwich (IST: '2026-01-15' -> '2026-01-14T18:30:00Z') shows the previous
+  // day - and the edit form would write that wrong date back.
+  dateStrings: ['DATE'],
 });
 
 // Called once at startup so the server fails immediately (not on first

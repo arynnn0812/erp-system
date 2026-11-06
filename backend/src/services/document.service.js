@@ -5,7 +5,7 @@
 //  - downloads use short-lived PRESIGNED URLs generated per request
 //  - EVERY entry point checks who may touch this owner's files (see below)
 const crypto = require('crypto');
-const { PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 const { s3, isConfigured } = require('../config/s3');
@@ -15,6 +15,8 @@ const employeeModel = require('../models/employee.model');
 const productModel = require('../models/product.model');
 const ApiError = require('../utils/ApiError');
 const audit = require('../utils/audit');
+const logger = require('../utils/logger');
+const { matchesDeclaredType } = require('../utils/fileSignature');
 
 function assertConfigured() {
   if (!isConfigured) {
@@ -76,6 +78,9 @@ async function upload({ file, ownerType, ownerId, actor, ip }) {
   // Authorize BEFORE reporting infrastructure state: an unauthorized caller
   // gets 403, not a 503 that confirms whether storage is wired up.
   await assertCanAccess(ownerType, ownerId, actor, 'write');
+  if (!matchesDeclaredType(file.buffer, file.mimetype)) {
+    throw new ApiError(415, `File content is not a valid ${file.mimetype}`);
+  }
   assertConfigured();
   await assertOwnerExists(ownerType, ownerId);
 
@@ -91,15 +96,25 @@ async function upload({ file, ownerType, ownerId, actor, ip }) {
     ContentType: file.mimetype,
   }));
 
-  const id = await documentModel.create({
-    ownerType,
-    ownerId,
-    fileName: file.originalname,
-    s3Key,
-    mimeType: file.mimetype,
-    sizeBytes: file.size,
-    uploadedBy: actor.id,
-  });
+  // S3 and MySQL cannot share a transaction. Upload first, then record; if
+  // the record fails, delete the object so the bucket holds no file that the
+  // database doesn't know about.
+  let id;
+  try {
+    id = await documentModel.create({
+      ownerType,
+      ownerId,
+      fileName: file.originalname,
+      s3Key,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      uploadedBy: actor.id,
+    });
+  } catch (err) {
+    await s3.send(new DeleteObjectCommand({ Bucket: config.aws.bucket, Key: s3Key }))
+      .catch((cleanupErr) => logger.error({ err: cleanupErr, s3Key }, 'orphaned S3 object after failed insert'));
+    throw err;
+  }
 
   await audit({
     userId: actor.id, action: 'DOCUMENT_UPLOAD', entity: 'documents', entityId: id,
@@ -142,4 +157,23 @@ async function getDownloadUrl({ documentId, actor, ip }) {
   return { fileName: doc.file_name, url, expiresInSeconds: 300 };
 }
 
-module.exports = { upload, listByOwner, getDownloadUrl };
+// Delete uses the WRITE policy of the owner (same people who may upload).
+// Row first, then object: a failed S3 delete leaves an unreachable object to
+// sweep later, never a database row pointing at a missing file.
+async function remove({ documentId, actor, ip }) {
+  const doc = await documentModel.findById(documentId);
+  if (!doc) throw new ApiError(404, 'Document not found');
+  await assertCanAccess(doc.owner_type, doc.owner_id, actor, 'write');
+  assertConfigured();
+
+  await documentModel.remove(doc.id);
+  await s3.send(new DeleteObjectCommand({ Bucket: config.aws.bucket, Key: doc.s3_key }))
+    .catch((err) => logger.error({ err, s3Key: doc.s3_key }, 'S3 delete failed; object orphaned'));
+
+  await audit({
+    userId: actor.id, action: 'DOCUMENT_DELETE', entity: 'documents', entityId: doc.id,
+    details: { ownerType: doc.owner_type, ownerId: doc.owner_id, fileName: doc.file_name }, ip,
+  });
+}
+
+module.exports = { upload, listByOwner, getDownloadUrl, remove };

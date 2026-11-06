@@ -39,4 +39,10 @@ const downloadUrl = asyncHandler(async (req, res) => {
   res.json({ success: true, data: result });
 });
 
-module.exports = { upload, list, downloadUrl };
+// DELETE /api/documents/:id
+const remove = asyncHandler(async (req, res) => {
+  await documentService.remove({ documentId: Number(req.params.id), actor: req.user, ip: req.ip });
+  res.json({ success: true, message: 'Document deleted' });
+});
+
+module.exports = { upload, list, downloadUrl, remove };

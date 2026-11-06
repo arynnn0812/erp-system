@@ -27,4 +27,17 @@ async function listByOwner(ownerType, ownerId) {
   return rows;
 }
 
-module.exports = { create, findById, listByOwner };
+async function remove(id) {
+  const [result] = await pool.execute('DELETE FROM documents WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
+async function countByOwner(ownerType, ownerId) {
+  const [[{ n }]] = await pool.execute(
+    'SELECT COUNT(*) AS n FROM documents WHERE owner_type = ? AND owner_id = ?',
+    [ownerType, ownerId]
+  );
+  return n;
+}
+
+module.exports = { create, findById, listByOwner, remove, countByOwner };

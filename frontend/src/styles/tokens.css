@@ -1,0 +1,142 @@
+/* Design tokens. Every colour, size and shadow in the app comes from here,
+   so the dark theme is just a second set of values for the same names.
+   The theme is set as <html data-theme="light|dark"> before first paint
+   (see index.html) and kept in sync by ThemeContext. */
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --surface-hover: #f5f7fa;
+  --border: #e2e5ea;
+  --border-strong: #cdd2da;
+
+  /* text */
+  --text: #151b26;
+  --text-2: #3d4655;
+  --muted: #6a7382;
+
+  /* brand */
+  --primary: #2f5bd8;
+  --primary-hover: #2449b8;
+  --primary-soft: #eaf0fd;
+  --primary-text: #ffffff;
+  --ring: rgba(47, 91, 216, 0.35);
+
+  /* semantic: strong colour for text/icons, soft colour for backgrounds */
+  --success: #13804f;
+  --success-soft: #e6f5ee;
+  --warning: #a65b00;
+  --warning-soft: #fdf1df;
+  --danger: #c4322d;
+  --danger-soft: #fcebea;
+  --danger-hover: #a52823;
+  --info: #0a6fa6;
+  --info-soft: #e5f3fb;
+  --neutral-soft: #eef0f3;
+
+  /* sidebar (stays dark in both themes) */
+  --sidebar-bg: #111827;
+  --sidebar-text: #c6ccd7;
+  --sidebar-muted: #7d8697;
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-active: rgba(110, 148, 255, 0.16);
+  --sidebar-active-text: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+
+  /* charts */
+  --chart-1: #2f5bd8;
+  --chart-2: #13804f;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #db2777;
+  --chart-6: #0891b2;
+  --chart-grid: #e6e9ee;
+
+  --overlay: rgba(12, 17, 29, 0.5);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 20px 48px rgba(16, 24, 40, 0.18), 0 4px 12px rgba(16, 24, 40, 0.08);
+
+  /* type */
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+
+  /* spacing (4px grid) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  --control-h: 38px;
+  --control-h-sm: 32px;
+  --sidebar-w: 248px;
+  --topbar-h: 60px;
+
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 160ms;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0c1018;
+  --surface: #141a24;
+  --surface-2: #1b2230;
+  --surface-hover: #1a212e;
+  --border: #262e3c;
+  --border-strong: #354052;
+
+  --text: #e7eaf0;
+  --text-2: #c2c9d4;
+  --muted: #8d97a8;
+
+  --primary: #6f93ff;
+  --primary-hover: #8aa7ff;
+  --primary-soft: rgba(111, 147, 255, 0.14);
+  --primary-text: #0b1020;
+  --ring: rgba(111, 147, 255, 0.45);
+
+  --success: #4cc38a;
+  --success-soft: rgba(76, 195, 138, 0.14);
+  --warning: #f0a54a;
+  --warning-soft: rgba(240, 165, 74, 0.14);
+  --danger: #f2716b;
+  --danger-soft: rgba(242, 113, 107, 0.14);
+  --danger-hover: #f58e89;
+  --info: #4fb3e8;
+  --info-soft: rgba(79, 179, 232, 0.14);
+  --neutral-soft: rgba(255, 255, 255, 0.07);
+
+  --sidebar-bg: #0a0e15;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+
+  --chart-1: #6f93ff;
+  --chart-2: #4cc38a;
+  --chart-3: #f0a54a;
+  --chart-4: #a98bff;
+  --chart-5: #f27aaf;
+  --chart-6: #4fc3dc;
+  --chart-grid: #232b38;
+
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.6);
+}

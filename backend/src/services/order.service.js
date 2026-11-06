@@ -16,9 +16,13 @@ async function createOrder({ customerId, items, taxPercent = 0, discount = 0, ac
   if (!customer) throw new ApiError(400, 'Invalid customerId');
 
   // Merge duplicate product lines (2x product 5 + 3x product 5 = 5x).
+  // Number() matters: with string input, '5' and 5 are different Map keys and
+  // 0 + '3' + '2' is the string '032'. The validators sanitize too; this keeps
+  // the service correct when called from anywhere else.
   const merged = new Map();
   for (const it of items) {
-    merged.set(it.productId, (merged.get(it.productId) || 0) + it.quantity);
+    const productId = Number(it.productId);
+    merged.set(productId, (merged.get(productId) || 0) + Number(it.quantity));
   }
 
   // DEADLOCK AVOIDANCE: always lock product rows in ascending id order.

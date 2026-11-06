@@ -1,8 +1,12 @@
 // Seed script: creates one demo user per role.
-// Run once after loading schema.sql:  node scripts/seed.js
+//   npm run seed         demo logins only
+//   npm run seed:demo    demo logins + six months of demo business data
+// Run after `npm run migrate`. Safe to re-run: existing users are skipped,
+// and demo data is only added to a database without products.
 // (A script, not raw SQL, because bcrypt hashes must be generated in code.)
 const bcrypt = require('bcryptjs');
 const { pool } = require('../src/config/db');
+const { seedDemoData } = require('./demo-data');
 
 const DEMO_PASSWORD = 'Password@123'; // demo only - change in production
 
@@ -25,6 +29,8 @@ async function seed() {
     );
     console.log(`seeded ${u.role.padEnd(8)} ${u.email}`);
   }
+
+  if (process.argv.includes('--demo')) await seedDemoData();
 
   console.log(`\nAll demo accounts use password: ${DEMO_PASSWORD}`);
   await pool.end();

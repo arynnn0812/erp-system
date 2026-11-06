@@ -3,6 +3,7 @@
 // Every route/controller just calls next(err); the response format for ALL
 // errors is decided here, in one place.
 const config = require('../config/env');
+const logger = require('../utils/logger');
 
 // 404 - reached only when no route matched
 function notFound(req, res, next) {
@@ -12,7 +13,6 @@ function notFound(req, res, next) {
   });
 }
 
-// eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   // Multer throws its own error class, which carries no statusCode - without
   // this branch an oversized upload would fall through to a generic 500
@@ -27,6 +27,16 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // Constraint violations are client errors, not crashes. Services check the
+  // common cases first for friendlier messages; this catches the rest, including
+  // two requests racing past the same "does it exist?" check.
+  if (err.code === 'ER_DUP_ENTRY') {
+    return res.status(409).json({ success: false, message: 'A record with this value already exists' });
+  }
+  if (err.code === 'ER_NO_REFERENCED_ROW_2') {
+    return res.status(400).json({ success: false, message: 'A referenced record does not exist' });
+  }
+
   const statusCode = err.statusCode || 500;
 
   // Operational errors (thrown as ApiError) are safe to show the client.
@@ -37,12 +47,14 @@ function errorHandler(err, req, res, next) {
       : 'Internal server error';
 
   if (statusCode >= 500) {
-    console.error(err); // in production this would go to a proper logger
+    (req.log || logger).error({ err }, 'unhandled error'); // carries the request id
   }
 
   res.status(statusCode).json({
     success: false,
     message,
+    // Lets a user report "it failed" with an id support can find in the logs.
+    ...(statusCode >= 500 && { requestId: req.id }),
     // stack trace only in development, for debugging
     ...(config.nodeEnv === 'development' && { stack: err.stack }),
   });

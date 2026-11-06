@@ -1,6 +1,7 @@
 // Audit log helper. Fire-and-forget by design: a failed audit write should
 // never break the business operation, so errors are logged, not thrown.
 const { pool } = require('../config/db');
+const logger = require('./logger');
 
 async function audit({ userId, action, entity, entityId, details, ip }) {
   try {
@@ -17,7 +18,7 @@ async function audit({ userId, action, entity, entityId, details, ip }) {
       ]
     );
   } catch (err) {
-    console.error('[audit] failed to write audit log:', err.message);
+    logger.error({ err, action }, 'failed to write audit log');
   }
 }
 

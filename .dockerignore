@@ -1,0 +1,15 @@
+# Build context is the repo root (the API image needs database/migrations).
+# Keep it small and keep secrets out of image layers.
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+.git
+.github
+docs
+**/.DS_Store
+**/.vscode
+**/.idea

@@ -1,0 +1,1710 @@
+openapi: 3.1.0
+info:
+  title: ERP System API
+  version: 1.0.0
+  summary: Inventory, sales and HR for a small business, with role-based access.
+  description: |
+    JSON over HTTPS. Every response has `success: true|false`. Errors carry a
+    `message`, and validation errors also list the failing `errors[].field`.
+
+    **Authentication.** `POST /api/auth/login` sets the `erp_session` cookie
+    (httpOnly, SameSite=Strict, Path=/api, Secure in production) and also
+    returns the token, so non-browser clients can send
+    `Authorization: Bearer <token>` instead. Sessions end on logout-all,
+    password change or reset, deactivation, and role change.
+
+    **Roles.** ADMIN, HR, MANAGER, EMPLOYEE. Each operation lists the roles
+    allowed; anyone else gets 403.
+
+    **Conventions.**
+    - Money is a decimal string (`"62999.00"`): MySQL DECIMAL, kept exact.
+    - Dates are `YYYY-MM-DD`; timestamps are ISO 8601 UTC.
+    - Paged lists return `rows`, `total`, `page`, `pages`; other lists return `data`.
+    - Rate limits (per client IP): 300 requests/minute for the whole API
+      (health checks exempt), 10 failed logins per 15 minutes. Limited
+      responses are 429 and carry `RateLimit` / `RateLimit-Policy` headers.
+    - Every response has an `X-Request-Id` header; 500 responses repeat it
+      as `requestId` so a report can be matched to the server log.
+
+    Human-readable guide: docs/API.md. This file is checked against the
+    routes the API actually registers (backend/test/openapi.test.js).
+servers:
+  - url: http://localhost:4000
+    description: Local API (npm run dev)
+  - url: http://localhost:8080
+    description: Docker Compose stack (through nginx)
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+tags:
+  - name: Health
+    description: Liveness and readiness probes (no authentication)
+  - name: Auth
+    description: Sessions, passwords and the signed-in user
+  - name: Users
+    description: Login accounts and access (ADMIN)
+  - name: Inventory
+    description: Categories, products, stock movements and reorder planning
+  - name: Sales
+    description: Customers, orders and sales reports
+  - name: HR
+    description: Departments and employees (salary visible to ADMIN and HR only)
+  - name: Dashboard
+    description: Role-aware headline numbers and charts
+  - name: Documents
+    description: Files stored in S3. Return 503 when storage is not configured.
+  - name: Audit
+    description: The append-only audit log (ADMIN)
+
+paths:
+  # ---------------------------------------------------------------- Health
+  /api/health/live:
+    get:
+      operationId: getLiveness
+      tags: [Health]
+      summary: Liveness - the process is up (never touches the database)
+      security: []
+      responses:
+        '200':
+          description: Live
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  status: { const: live }
+                  uptimeSeconds: { type: integer }
+  /api/health/ready:
+    get:
+      operationId: getReadiness
+      tags: [Health]
+      summary: Readiness - MySQL answers within 2 s and the process is not shutting down
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Ready' }
+        '503': { $ref: '#/components/responses/NotReady' }
+  /api/health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Alias of /api/health/ready
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Ready' }
+        '503': { $ref: '#/components/responses/NotReady' }
+
+  # ------------------------------------------------------------------ Auth
+  /api/auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Sign in; sets the session cookie
+      security: []
+      description: |
+        Wrong email and wrong password give the same 401, in the same time,
+        so accounts cannot be enumerated. Only failed attempts count toward
+        the login rate limit. Every attempt is written to the audit log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, maxLength: 255 }
+                password: { type: string }
+      responses:
+        '200':
+          description: Signed in
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: erp_session=<jwt>; HttpOnly; SameSite=Strict; Path=/api
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string, description: 'JWT, for Authorization: Bearer' }
+                      expiresAt: { type: string, format: date-time }
+                      user: { $ref: '#/components/schemas/SessionUser' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Error', description: Invalid email or password }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/auth/logout:
+    post:
+      operationId: logout
+      tags: [Auth]
+      summary: Clear the session cookie on this device
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+  /api/auth/logout-all:
+    post:
+      operationId: logoutEverywhere
+      tags: [Auth]
+      summary: End every session of this user, on every device
+      description: Roles - any signed-in user.
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [Auth]
+      summary: Change own password; other sessions are signed out, this one gets a new token
+      description: Roles - any signed-in user. Shares the failed-login rate limit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { $ref: '#/components/schemas/Password' }
+      responses:
+        '200':
+          description: Changed; a fresh session cookie is set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string }
+                      expiresAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [Auth]
+      summary: The signed-in user
+      description: Roles - any signed-in user.
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/profile:
+    get:
+      operationId: getProfile
+      tags: [Auth]
+      summary: Own account plus own HR record (including own salary)
+      description: Roles - any signed-in user. `employee` is null when the login has no linked HR record.
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      user: { $ref: '#/components/schemas/User' }
+                      employee:
+                        oneOf:
+                          - $ref: '#/components/schemas/Employee'
+                          - type: 'null'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auth/register:
+    post:
+      operationId: createUser
+      tags: [Auth, Users]
+      summary: Create a login account
+      description: Roles - ADMIN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, role]
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email, maxLength: 255 }
+                password: { $ref: '#/components/schemas/Password' }
+                role: { $ref: '#/components/schemas/Role' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data: { $ref: '#/components/schemas/SessionUser' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Error', description: Email already registered }
+
+  # ----------------------------------------------------------------- Users
+  /api/users:
+    get:
+      operationId: listUsers
+      tags: [Users]
+      summary: All login accounts
+      description: Roles - ADMIN.
+      responses:
+        '200':
+          description: Accounts, with the linked HR record id if any
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  count: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/User'
+                        - type: object
+                          properties:
+                            created_at: { type: string, format: date-time }
+                            employee_id: { type: [integer, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/users/{id}:
+    patch:
+      operationId: updateUserAccess
+      tags: [Users]
+      summary: Change a user's role or activate/deactivate them
+      description: |
+        Roles - ADMIN. Either change signs the user out everywhere. An admin
+        cannot change their own role or status (409), so the last admin
+        cannot lock everyone out.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { $ref: '#/components/schemas/Role' }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: Own account }
+  /api/users/{id}/reset-password:
+    post:
+      operationId: resetUserPassword
+      tags: [Users]
+      summary: Set a new password for a user; their sessions are signed out
+      description: Roles - ADMIN.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                newPassword: { $ref: '#/components/schemas/Password' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------- Inventory
+  /api/categories:
+    get:
+      operationId: listCategories
+      tags: [Inventory]
+      summary: All categories with their product counts
+      description: Roles - any signed-in user.
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        product_count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createCategory
+      tags: [Inventory]
+      summary: Create a category
+      description: Roles - ADMIN, MANAGER.
+      requestBody: { $ref: '#/components/requestBodies/Named' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNamed' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Error', description: Name already exists }
+  /api/categories/{id}:
+    put:
+      operationId: updateCategory
+      tags: [Inventory]
+      summary: Rename a category
+      description: Roles - ADMIN, MANAGER.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { $ref: '#/components/requestBodies/Named' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: Name already exists }
+    delete:
+      operationId: deleteCategory
+      tags: [Inventory]
+      summary: Delete an empty category
+      description: Roles - ADMIN.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: Category still has products }
+
+  /api/products:
+    get:
+      operationId: listProducts
+      tags: [Inventory]
+      summary: Active products, searched and paged
+      description: Roles - any signed-in user.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Search' }
+        - name: categoryId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: lowStock
+          in: query
+          description: true = only products below their reorder level
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: One page of products
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      rows:
+                        type: array
+                        items:
+                          allOf:
+                            - $ref: '#/components/schemas/ProductSummary'
+                            - type: object
+                              properties:
+                                category_id: { type: integer }
+                                category: { type: string }
+                                low_stock: { type: integer, enum: [0, 1] }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createProduct
+      tags: [Inventory]
+      summary: Create a product; opening stock is recorded as an IN movement
+      description: Roles - ADMIN, MANAGER.
+      requestBody: { $ref: '#/components/requestBodies/Product' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedId' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Error', description: SKU already exists }
+  /api/products/alerts/low-stock:
+    get:
+      operationId: listLowStockProducts
+      tags: [Inventory]
+      summary: Products below their reorder level
+      description: Roles - any signed-in user.
+      responses:
+        '200':
+          description: Low-stock products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  count: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        sku: { type: string }
+                        quantity: { type: integer }
+                        reorder_level: { type: integer }
+                        category: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/products/insights/reorder:
+    get:
+      operationId: getReorderPlan
+      tags: [Inventory]
+      summary: Reorder plan - sales velocity, days of stock left, suggested quantity
+      description: |
+        Roles - ADMIN, MANAGER.
+
+        `daily_velocity` = units sold in confirmed orders over the last `days`
+        days / `days`. `suggested_qty` = ceil(velocity x `cover` + reorder level
+        - quantity), at least 0. `status` is OUT (no stock), REORDER (below
+        reorder level, or runs out within `leadTime` days) or OK. Sorted OUT,
+        then REORDER, then by days of stock left.
+      parameters:
+        - name: days
+          in: query
+          description: Sales window, in days
+          schema: { type: integer, minimum: 7, maximum: 365, default: 30 }
+        - name: cover
+          in: query
+          description: Days of sales the purchase should cover
+          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: leadTime
+          in: query
+          description: Supplier lead time, in days
+          schema: { type: integer, minimum: 0, maximum: 180, default: 7 }
+      responses:
+        '200':
+          description: One row per active product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  params:
+                    type: object
+                    properties:
+                      days: { type: integer }
+                      cover: { type: integer }
+                      leadTime: { type: integer }
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/ProductSummary'
+                        - type: object
+                          properties:
+                            category: { type: string }
+                            units_sold: { type: integer }
+                            daily_velocity: { type: number }
+                            days_of_stock: { type: [integer, 'null'], description: null when nothing sold in the window }
+                            suggested_qty: { type: integer, minimum: 0 }
+                            status: { type: string, enum: [OUT, REORDER, OK] }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/products/{id}:
+    get:
+      operationId: getProduct
+      tags: [Inventory]
+      summary: One product
+      description: Roles - any signed-in user.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/ProductSummary'
+                      - type: object
+                        properties:
+                          category_id: { type: integer }
+                          category: { type: string }
+                          is_active: { type: integer, enum: [0, 1] }
+                          created_at: { type: string, format: date-time }
+                          updated_at: { type: string, format: date-time }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateProduct
+      tags: [Inventory]
+      summary: Update a product's details (stock changes go through /stock)
+      description: Roles - ADMIN, MANAGER. `quantity` is ignored here.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { $ref: '#/components/requestBodies/Product' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: SKU already exists }
+    delete:
+      operationId: deactivateProduct
+      tags: [Inventory]
+      summary: Deactivate a product (soft delete; order history keeps it)
+      description: Roles - ADMIN.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/products/{id}/stock:
+    post:
+      operationId: adjustStock
+      tags: [Inventory]
+      summary: Record a stock movement (IN or OUT)
+      description: |
+        Roles - ADMIN, MANAGER. Runs in a transaction with the product row
+        locked, so concurrent movements cannot oversell or lose an update.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, quantity]
+              properties:
+                type: { type: string, enum: [IN, OUT] }
+                quantity: { type: integer, minimum: 1 }
+                reference: { type: string, maxLength: 100, example: PO-2026-11-01 }
+      responses:
+        '200':
+          description: New stock level
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      productId: { type: integer }
+                      previousQuantity: { type: integer }
+                      newQuantity: { type: integer }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Error', description: Insufficient stock }
+  /api/products/{id}/transactions:
+    get:
+      operationId: listStockMovements
+      tags: [Inventory]
+      summary: Stock ledger for one product, newest first, with the balance after each movement
+      description: Roles - any signed-in user. Also returned under `data` for older clients.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: One page of movements
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      rows:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            type: { type: string, enum: [IN, OUT] }
+                            quantity: { type: integer }
+                            reference: { type: [string, 'null'], example: ORDER-42 }
+                            created_at: { type: string, format: date-time }
+                            performed_by: { type: [string, 'null'] }
+                            balance_after: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- Sales
+  /api/customers:
+    get:
+      operationId: listCustomers
+      tags: [Sales]
+      summary: Customers, searched (name, email, phone) and paged
+      description: Roles - any signed-in user.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Search' }
+      responses:
+        '200':
+          description: One page of customers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      rows: { type: array, items: { $ref: '#/components/schemas/Customer' } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      operationId: createCustomer
+      tags: [Sales]
+      summary: Create a customer
+      description: Roles - ADMIN, MANAGER.
+      requestBody: { $ref: '#/components/requestBodies/Customer' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedId' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [Sales]
+      summary: One customer
+      description: Roles - any signed-in user.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Customer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data: { $ref: '#/components/schemas/Customer' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateCustomer
+      tags: [Sales]
+      summary: Update a customer
+      description: Roles - ADMIN, MANAGER.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { $ref: '#/components/requestBodies/Customer' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/orders:
+    get:
+      operationId: listOrders
+      tags: [Sales]
+      summary: Orders, filtered and paged, newest first
+      description: Roles - ADMIN, MANAGER.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - name: customerId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OrderStatus' }
+        - { $ref: '#/components/parameters/FromOptional' }
+        - { $ref: '#/components/parameters/ToOptional' }
+      responses:
+        '200':
+          description: One page of orders
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      rows:
+                        type: array
+                        items:
+                          allOf:
+                            - $ref: '#/components/schemas/OrderTotals'
+                            - type: object
+                              properties:
+                                customer: { type: string }
+                                created_by: { type: string }
+                                item_count: { type: integer }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createOrder
+      tags: [Sales]
+      summary: Create an order - stock check, stock-out and order rows in one transaction
+      description: |
+        Roles - ADMIN, MANAGER. Product rows are locked in id order (so two
+        orders cannot deadlock), every line is checked against current stock,
+        and either the whole order is written - order, items, stock
+        movements `ORDER-<id>` - or nothing is. Prices are copied from the
+        product at this moment, so later price changes do not alter old orders.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, items]
+              properties:
+                customerId: { type: integer, minimum: 1 }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: integer, minimum: 1 }
+                      quantity: { type: integer, minimum: 1 }
+                taxPercent: { type: number, minimum: 0, maximum: 100, default: 0 }
+                discount: { type: number, minimum: 0, default: 0, description: Absolute amount }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      orderId: { type: integer }
+                      subtotal: { type: number }
+                      tax: { type: number }
+                      discount: { type: number }
+                      grandTotal: { type: number }
+                      items: { type: array, items: { type: object } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Error', description: Insufficient stock, or discount exceeds the order value }
+  /api/orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [Sales]
+      summary: One order with its items (the invoice)
+      description: Roles - ADMIN, MANAGER.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/OrderTotals'
+                      - type: object
+                        properties:
+                          customer_id: { type: integer }
+                          customer: { type: string }
+                          created_by: { type: integer }
+                          created_by_name: { type: string }
+                          created_at: { type: string, format: date-time }
+                          updated_at: { type: string, format: date-time }
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                product_id: { type: integer }
+                                name: { type: string }
+                                sku: { type: string }
+                                quantity: { type: integer }
+                                unit_price: { $ref: '#/components/schemas/Money' }
+                                line_total: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/orders/{id}/cancel:
+    post:
+      operationId: cancelOrder
+      tags: [Sales]
+      summary: Cancel a confirmed order and return its stock
+      description: Roles - ADMIN, MANAGER. Writes IN movements `ORDER-<id>-CANCEL`, in one transaction.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Error', description: Order is not CONFIRMED }
+  /api/orders/reports/summary:
+    get:
+      operationId: getSalesSummary
+      tags: [Sales]
+      summary: Revenue, order count and average order value for a date range
+      description: Roles - ADMIN, MANAGER. Confirmed orders only.
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+      responses:
+        '200':
+          description: Totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      order_count: { type: integer }
+                      revenue: { $ref: '#/components/schemas/Money' }
+                      avg_order_value: { $ref: '#/components/schemas/Money' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/orders/reports/top-products:
+    get:
+      operationId: getTopProducts
+      tags: [Sales]
+      summary: Best sellers by units sold for a date range (confirmed orders)
+      description: Roles - ADMIN, MANAGER.
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 5 }
+      responses:
+        '200': { $ref: '#/components/responses/TopProducts' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/orders/reports/daily:
+    get:
+      operationId: getDailySales
+      tags: [Sales]
+      summary: Orders and revenue per day (days without sales are omitted)
+      description: Roles - ADMIN, MANAGER.
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+      responses:
+        '200':
+          description: One row per day with sales
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: string, format: date }
+                        orders: { type: integer }
+                        revenue: { $ref: '#/components/schemas/Money' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/orders/reports/export:
+    get:
+      operationId: exportOrdersCsv
+      tags: [Sales]
+      summary: Every order in a date range as CSV (all statuses)
+      description: |
+        Roles - ADMIN, MANAGER. UTF-8 with a BOM (so Excel reads it
+        correctly), CRLF line endings. Cells a spreadsheet would run as a
+        formula (starting with = + - @ tab or CR) get a leading apostrophe.
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+      responses:
+        '200':
+          description: CSV download
+          headers:
+            Content-Disposition:
+              schema: { type: string, example: 'attachment; filename="orders-2026-10-01-to-2026-10-31.csv"' }
+          content:
+            text/csv:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # -------------------------------------------------------------------- HR
+  /api/departments:
+    get:
+      operationId: listDepartments
+      tags: [HR]
+      summary: All departments with employee counts
+      description: Roles - any signed-in user.
+      responses:
+        '200':
+          description: Departments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        employee_count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createDepartment
+      tags: [HR]
+      summary: Create a department
+      description: Roles - ADMIN, HR.
+      requestBody: { $ref: '#/components/requestBodies/Named' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNamed' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Error', description: Name already exists }
+  /api/departments/{id}:
+    put:
+      operationId: updateDepartment
+      tags: [HR]
+      summary: Rename a department
+      description: Roles - ADMIN, HR.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { $ref: '#/components/requestBodies/Named' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteDepartment
+      tags: [HR]
+      summary: Delete an empty department
+      description: Roles - ADMIN.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: Department still has employees }
+
+  /api/employees:
+    get:
+      operationId: listEmployees
+      tags: [HR]
+      summary: Employees, searched and paged
+      description: |
+        Roles - ADMIN, HR, MANAGER. `salary` is only selected for ADMIN and
+        HR: for MANAGER it is absent from the SQL, not just hidden.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Search' }
+        - name: departmentId
+          in: query
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: One page of employees
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      rows: { type: array, items: { $ref: '#/components/schemas/Employee' } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createEmployee
+      tags: [HR]
+      summary: Add an employee
+      description: |
+        Roles - ADMIN, HR. Only ADMIN may set or change `userId` (the link to a
+        login, which lets that login see this record's salary and documents);
+        HR gets 403 for it.
+      requestBody: { $ref: '#/components/requestBodies/Employee' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedId' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Error', description: Email or login already used }
+  /api/employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [HR]
+      summary: One employee (salary for ADMIN and HR only)
+      description: Roles - ADMIN, HR, MANAGER.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Employee
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data: { $ref: '#/components/schemas/Employee' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: updateEmployee
+      tags: [HR]
+      summary: Update an employee; salary changes are audited with old and new values
+      description: Roles - ADMIN, HR. Omitting `userId` keeps the current link; only ADMIN may change it.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { $ref: '#/components/requestBodies/Employee' }
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: Email or login already used }
+    delete:
+      operationId: deleteEmployee
+      tags: [HR]
+      summary: Delete an employee who has no documents
+      description: Roles - ADMIN.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error', description: Employee still has documents }
+
+  # ------------------------------------------------------------- Dashboard
+  /api/dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [Dashboard]
+      summary: Headline numbers - which ones depends on the role
+      description: |
+        Roles - any signed-in user. Everyone gets the inventory figures;
+        ADMIN and MANAGER also get sales; ADMIN and HR also get headcount.
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  role: { $ref: '#/components/schemas/Role' }
+                  data:
+                    type: object
+                    properties:
+                      total_products: { type: integer }
+                      low_stock_count: { type: integer }
+                      total_revenue: { $ref: '#/components/schemas/Money' }
+                      total_orders: { type: integer }
+                      total_customers: { type: integer }
+                      total_employees: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/dashboard/sales-trend:
+    get:
+      operationId: getSalesTrend
+      tags: [Dashboard]
+      summary: Confirmed orders and revenue per month
+      description: Roles - ADMIN, MANAGER.
+      parameters:
+        - name: months
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 24, default: 6 }
+      responses:
+        '200':
+          description: One row per month with sales
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        month: { type: string, example: 2026-10 }
+                        orders: { type: integer }
+                        revenue: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/dashboard/category-sales:
+    get:
+      operationId: getCategorySales
+      tags: [Dashboard]
+      summary: Revenue and units by category (confirmed orders)
+      description: Roles - ADMIN, MANAGER.
+      responses:
+        '200':
+          description: One row per category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category: { type: string }
+                        revenue: { $ref: '#/components/schemas/Money' }
+                        units_sold: { type: string }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/dashboard/top-products:
+    get:
+      operationId: getDashboardTopProducts
+      tags: [Dashboard]
+      summary: Best sellers of the last 90 days
+      description: Roles - ADMIN, MANAGER. `window` gives the dates used.
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        '200': { $ref: '#/components/responses/TopProducts' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ------------------------------------------------------------- Documents
+  /api/documents:
+    get:
+      operationId: listDocuments
+      tags: [Documents]
+      summary: Documents attached to an employee or a product
+      description: |
+        Product documents - any signed-in user. Employee documents - ADMIN,
+        HR, and the employee themselves (via the linked login). Anyone else
+        gets the same 403 whether or not the employee exists.
+      parameters:
+        - name: ownerType
+          in: query
+          required: true
+          schema: { type: string, enum: [EMPLOYEE, PRODUCT] }
+        - name: ownerId
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Document metadata (no file contents)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  count: { type: integer }
+                  data: { type: array, items: { $ref: '#/components/schemas/Document' } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: uploadDocument
+      tags: [Documents]
+      summary: Upload a file (PDF, PNG, JPEG or DOCX, at most 5 MB)
+      description: |
+        Product documents - ADMIN, MANAGER. Employee documents - ADMIN, HR.
+        The file's first bytes must match its declared type (415 otherwise),
+        so a renamed executable is rejected.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, ownerType, ownerId]
+              properties:
+                file: { type: string, format: binary }
+                ownerType: { type: string, enum: [EMPLOYEE, PRODUCT] }
+                ownerId: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      s3Key: { type: string }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/Error', description: File larger than 5 MB }
+        '415': { $ref: '#/components/responses/Error', description: Content does not match the type }
+        '503': { $ref: '#/components/responses/Error', description: Storage not configured }
+  /api/documents/{id}/url:
+    get:
+      operationId: getDocumentUrl
+      tags: [Documents]
+      summary: A download link valid for 5 minutes (presigned S3 URL)
+      description: Same access rules as listing. Each download is audited.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data:
+                    type: object
+                    properties:
+                      fileName: { type: string }
+                      url: { type: string, format: uri }
+                      expiresInSeconds: { const: 300 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Error', description: Storage not configured }
+  /api/documents/{id}:
+    delete:
+      operationId: deleteDocument
+      tags: [Documents]
+      summary: Delete a document and its file
+      description: Same rules as uploading.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Message' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Error', description: Storage not configured }
+
+  # ----------------------------------------------------------------- Audit
+  /api/audit-logs:
+    get:
+      operationId: listAuditLog
+      tags: [Audit]
+      summary: The audit log, newest first, filtered and paged
+      description: Roles - ADMIN. The log is append-only; there is no endpoint to change it.
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: action
+          in: query
+          schema: { type: string, maxLength: 50, example: LOGIN_FAILED }
+        - name: entity
+          in: query
+          schema: { type: string, maxLength: 50, example: orders }
+        - name: userId
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - { $ref: '#/components/parameters/FromOptional' }
+        - { $ref: '#/components/parameters/ToOptional' }
+      responses:
+        '200':
+          description: One page of entries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      rows:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            action: { type: string }
+                            entity: { type: [string, 'null'] }
+                            entity_id: { type: [integer, 'null'] }
+                            details: { type: [object, 'null'], description: Action-specific JSON }
+                            ip_address: { type: [string, 'null'] }
+                            created_at: { type: string, format: date-time }
+                            user_id: { type: [integer, 'null'] }
+                            user_name: { type: [string, 'null'] }
+                            user_email: { type: [string, 'null'] }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/audit-logs/actions:
+    get:
+      operationId: listAuditActions
+      tags: [Audit]
+      summary: The distinct action names present in the log (for filters)
+      description: Roles - ADMIN.
+      responses:
+        '200':
+          description: Action names
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { const: true }
+                  data: { type: array, items: { type: string } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: erp_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+    Search:
+      name: search
+      in: query
+      schema: { type: string, maxLength: 100 }
+    From:
+      name: from
+      in: query
+      required: true
+      description: First day, inclusive. A range covers at most 366 days.
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      required: true
+      description: Last day, inclusive; on or after `from`.
+      schema: { type: string, format: date }
+    FromOptional:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+    ToOptional:
+      name: to
+      in: query
+      description: Inclusive
+      schema: { type: string, format: date }
+
+  requestBodies:
+    Named:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string, maxLength: 100 }
+    Product:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, sku, categoryId, price]
+            properties:
+              name: { type: string, maxLength: 150 }
+              sku: { type: string, maxLength: 50 }
+              categoryId: { type: integer, minimum: 1 }
+              price: { type: number, minimum: 0 }
+              quantity: { type: integer, minimum: 0, description: Opening stock (create only) }
+              reorderLevel: { type: integer, minimum: 0 }
+              supplier: { type: string, maxLength: 150 }
+    Customer:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name]
+            properties:
+              name: { type: string, maxLength: 100 }
+              email: { type: string, format: email }
+              phone: { type: string, maxLength: 20 }
+              address: { type: string, maxLength: 255 }
+    Employee:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, email, departmentId, designation, joiningDate, salary]
+            properties:
+              name: { type: string, maxLength: 100 }
+              email: { type: string, format: email }
+              departmentId: { type: integer, minimum: 1 }
+              designation: { type: string, maxLength: 100 }
+              joiningDate: { type: string, format: date }
+              salary: { type: number, minimum: 0, description: Per year }
+              userId: { type: [integer, 'null'], minimum: 1, description: Login to link (ADMIN only) }
+
+  responses:
+    Message:
+      description: Done
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: true }
+              message: { type: string }
+    CreatedId:
+      description: Created
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: true }
+              data:
+                type: object
+                properties:
+                  id: { type: integer }
+    CreatedNamed:
+      description: Created
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: true }
+              data:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+    TopProducts:
+      description: Best sellers, by units sold
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: true }
+              window:
+                type: object
+                description: Dashboard endpoint only
+                properties:
+                  from: { type: string, format: date }
+                  to: { type: string, format: date }
+              data:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    sku: { type: string }
+                    units_sold: { type: string }
+                    revenue: { $ref: '#/components/schemas/Money' }
+    Ready:
+      description: Ready
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: true }
+              status: { const: ready }
+              database: { const: connected }
+              uptimeSeconds: { type: integer }
+              timestamp: { type: string, format: date-time }
+    NotReady:
+      description: Database unreachable, or shutting down
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: false }
+              status: { type: string, enum: [unavailable, shutting_down] }
+              message: { type: string }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationFailed:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Error'
+              - type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string }
+                        message: { type: string }
+          example:
+            success: false
+            message: Validation failed
+            errors: [{ field: price, message: price must be >= 0 }]
+    Unauthorized:
+      description: No session, or the session was revoked
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: The role is not allowed to do this
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: No such record
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: Rate limit reached
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [success, message]
+      properties:
+        success: { const: false }
+        message: { type: string }
+        requestId: { type: string, description: 500 responses only }
+    Page:
+      type: object
+      properties:
+        success: { const: true }
+        total: { type: integer }
+        page: { type: integer }
+        pages: { type: integer }
+    Money:
+      type: string
+      pattern: '^-?\d+\.\d{2}$'
+      example: '62999.00'
+    Role:
+      type: string
+      enum: [ADMIN, HR, MANAGER, EMPLOYEE]
+    Password:
+      type: string
+      minLength: 10
+      description: 10+ characters with a letter and a number; at most 72 bytes (bcrypt's limit)
+    SessionUser:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        is_active: { type: integer, enum: [0, 1] }
+        role: { $ref: '#/components/schemas/Role' }
+    ProductSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        sku: { type: string }
+        price: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer }
+        reorder_level: { type: integer }
+        supplier: { type: [string, 'null'] }
+    Customer:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    OrderStatus:
+      type: string
+      enum: [PENDING, CONFIRMED, CANCELLED]
+    OrderTotals:
+      type: object
+      properties:
+        id: { type: integer }
+        order_date: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        tax: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money' }
+        grand_total: { $ref: '#/components/schemas/Money' }
+    Employee:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        designation: { type: string }
+        joining_date: { type: string, format: date }
+        department_id: { type: integer }
+        department: { type: string }
+        salary: { $ref: '#/components/schemas/Money', description: ADMIN and HR only (and your own record in /auth/profile) }
+        user_id: { type: [integer, 'null'] }
+    Document:
+      type: object
+      properties:
+        id: { type: integer }
+        file_name: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        uploaded_by: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }

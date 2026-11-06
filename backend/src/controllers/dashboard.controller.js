@@ -32,7 +32,7 @@ const summary = asyncHandler(async (req, res) => {
 
 // GET /api/dashboard/sales-trend?months=6  (ADMIN, MANAGER)
 const salesTrend = asyncHandler(async (req, res) => {
-  const months = Math.min(Number(req.query.months) || 6, 24); // cap the range
+  const months = req.query.months ?? 6; // validated 1-24 by trendRules
   const data = await dashboardModel.monthlySalesTrend(months);
   res.json({ success: true, data });
 });
@@ -46,7 +46,7 @@ const categories = asyncHandler(async (req, res) => {
 // GET /api/dashboard/top-products?limit=5  (ADMIN, MANAGER)
 // Reuses the Phase 4 report query with a default 90-day window.
 const topProducts = asyncHandler(async (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 5, 20);
+  const limit = req.query.limit ?? 5; // validated 1-20 by topRules
   const to = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const data = await orderModel.topProducts({ from, to, limit });

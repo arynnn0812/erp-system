@@ -1,188 +1,239 @@
-# Cloud-Based ERP System
+# ERP System
 
-A production-style ERP for small/medium businesses: **inventory, sales/finance, and HR** in one system, with role-based access control for Admin, HR, Manager, and Employee, a role-aware analytics dashboard, and AWS S3 document storage.
-
-**Stack:** React · Node.js/Express · MySQL · JWT · AWS EC2 + S3 · Docker
+Inventory, sales and HR for a small business in one web app, with four roles
+(Admin, HR, Manager, Employee), each seeing only what it should. It also turns
+order history into an answer to "what should we buy next?".
 
 [![CI](https://github.com/arynnn0812/erp-system/actions/workflows/ci.yml/badge.svg)](https://github.com/arynnn0812/erp-system/actions/workflows/ci.yml)
 
----
+**React 18 · Node.js 22 / Express · MySQL 8 · AWS S3 · Docker**
 
-## Features
+![Admin dashboard](docs/screenshots/dashboard.png)
 
-- **Authentication & RBAC** — JWT in an `httpOnly`, `SameSite=Strict` cookie (Bearer header also accepted for API clients), bcrypt hashing, four roles enforced at route level, at SQL level (salary), and at object level (whether *this* user may read *this* row). Sessions are revocable: every request re-checks the user, so deactivation, role changes, password changes and "log out everywhere" apply immediately (`token_version`). Password policy (10+ chars, letter + digit, ≤72 bytes for bcrypt), failed-login rate limiting, admin account management with self-lockout protection.
-- **Inventory** — product/category CRUD, transactional stock in/out with `SELECT ... FOR UPDATE` row locking, append-only transaction ledger, low-stock alerts, search + pagination, soft delete.
-- **Sales/Finance** — customers, multi-item invoices with server-side totals (tax/discount), **atomic order confirmation** (order + items + stock deduction + ledger commit or roll back together), deadlock-safe lock ordering, compensating cancel-with-restock, date-range revenue reports, top products.
-- **HR** — departments and employees, HR/Admin-only management, field-level access (managers never receive salary data), audited salary changes.
-- **Dashboard** — role-aware summary counters, monthly sales trend, category-wise sales, top sellers; all aggregation in SQL.
-- **Documents** — uploads to a private S3 bucket (5MB cap, type verified from the file's magic bytes, not just the client's claim), metadata in MySQL, 5-minute presigned download URLs, S3 cleanup when the database write fails, delete endpoint. Employee documents are readable only by ADMIN, HR, or the employee themselves; product documents by any authenticated user. Every presigned URL issued is audited.
-- **Reorder planner** — per product: units sold over a chosen window, sales per day, days of stock left and a suggested order quantity (cover period of demand + reorder level as safety stock − on hand), all computed in SQL from confirmed orders; flags items that are out, below their reorder level, or will run out within the supplier lead time.
-- **Reports** — date-range sales report (revenue, orders, average order value, revenue per day, best sellers) and CSV export of every order in the range, with spreadsheet-formula injection neutralised. Orders list filters by status, customer and date; each order opens as a printable invoice (Print / Save as PDF).
-- **Administration & self-service** — user management (create, change role, deactivate, reset password), read-only audit log viewer, categories management, per-product stock history, documents on products and employees, and a "My profile" page for every role (own HR record and documents, change password, sign out everywhere).
-- **UI** — responsive React SPA built on a small in-house design system (CSS design tokens, no UI framework): light/dark/system themes, sidebar layout with a mobile drawer, accessible dialogs (focus trap, Esc, focus restore), toasts and confirm dialogs, skeleton loading, empty and error states, tables that become labelled cards on phones, debounced search, per-page error boundary, and route-level code splitting.
-- **Cross-cutting** — centralized error handling (constraint violations mapped to 409/400), express-validator validation and sanitization, parameterized queries everywhere, Helmet + locked-down CORS, API-wide rate limit, structured JSON logging (pino) with request IDs and secret redaction, graceful shutdown, append-only audit log (including logins and failed logins), liveness and readiness probes, and configuration validated at startup.
+| | |
+|---|---|
+| ![Reorder planner](docs/screenshots/reorder-planner.png) **Reorder planner**: sales velocity, days of stock left and what to buy | ![Invoice](docs/screenshots/invoice.png) **Invoices**: printable, from prices frozen at the time of sale |
+| ![Sales report](docs/screenshots/sales-report.png) **Sales report**: revenue by day, best sellers, CSV export | ![Product ledger](docs/screenshots/product-ledger.png) **Stock ledger**: every movement, with the balance after it |
+| ![Audit log, dark theme](docs/screenshots/audit-log.png) **Audit log** (dark theme) | <img src="docs/screenshots/mobile-dashboard.png" alt="Dashboard on a phone" width="49%"> <img src="docs/screenshots/mobile-orders.png" alt="Orders on a phone, dark theme" width="49%"> **Phones**: tables become cards |
 
-## Architecture
+*Screenshots of the running app with the bundled demo data.*
 
-```
-React SPA ──JSON/HTTPS──> Express API ──SQL pool──> MySQL (InnoDB)
-                              │
-                              └────────> AWS S3 (private bucket, presigned GETs)
-```
+## Try it
 
-3-tier, stateless API (JWT carries identity → horizontally scalable). Layered backend: `routes → middleware (auth, rbac, validation) → controllers → services → models`.
-
-## Getting started
-
-### With Docker (whole stack)
+With Docker, about two minutes:
 
 ```bash
 git clone https://github.com/arynnn0812/erp-system.git && cd erp-system
-cp .env.example .env        # set MYSQL_ROOT_PASSWORD, DB_PASSWORD, JWT_SECRET (openssl rand -base64 48)
+cp .env.example .env
+# set MYSQL_ROOT_PASSWORD, DB_PASSWORD and JWT_SECRET in .env, e.g. with: openssl rand -base64 32
 docker compose up -d --build --wait
-docker compose run --rm api node scripts/seed.js --demo   # demo logins + sample data
+docker compose run --rm api node scripts/seed.js --demo
 ```
 
-Open http://localhost:8080. MySQL, migrations, the API and nginx all run in
-containers; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production.
+Open http://localhost:8080 and sign in with any demo account (password `Password@123`):
 
-### For development
+| Account | Sees |
+|---|---|
+| `admin@erp.com` | Everything, including users and access, and the audit log |
+| `manager@erp.com` | Inventory, orders, customers, reports, the reorder planner, staff without salaries |
+| `hr@erp.com` | Employees with salaries, departments, employee documents |
+| `employee@erp.com` | The inventory dashboard, the product catalogue, and their own profile, salary and documents |
 
-Prerequisites: Node 20.19+, MySQL 8.
+The demo data is six months of a small IT-equipment distributor:
+- 17 products in 6 categories, 10 customers;
+- about 140 orders, a few of them cancelled;
+- a restock halfway through.
 
-```bash
-git clone https://github.com/arynnn0812/erp-system.git && cd erp-system
+It is created through the same code paths as the app, so every stock level is
+explained by its ledger.
 
-# backend
-cd backend
-npm install
-cp .env.example .env        # fill in DB credentials and JWT secret; AWS optional
-npm run migrate             # creates the database and applies database/migrations/*.sql
-npm run seed:demo           # demo users for all 4 roles (password: Password@123)
-                            # + six months of demo trading data
-                            # (or `npm run seed` for the users only)
-npm run dev                 # http://localhost:4000 (restarts on file changes)
+## What it does
 
-# frontend (second terminal)
-cd frontend
-npm install
-npm run dev                 # http://localhost:5173, proxies /api to the backend
+**Inventory**
+- Products and categories, with search, paging and soft delete.
+- Stock in and out, recorded in an append-only ledger.
+- Low-stock alerts.
+- A **reorder planner** that works out, from real sales:
+  - how fast each product sells;
+  - how many days of stock are left;
+  - how many to order.
+
+  The sales window, cover period and supplier lead time are adjustable, and
+  the page explains its own formula.
+
+**Sales**
+- Customers, and multi-line orders with tax and discount.
+- Each order is all-or-nothing: the stock check, stock-out, order and ledger
+  rows commit together or not at all, even under concurrent orders for the
+  same product.
+- Cancelling an order returns its stock.
+- Every order is a printable invoice.
+- Reports by date range, and CSV export that Excel opens cleanly.
+  Formula-like cells are neutralised.
+
+**HR**
+- Departments and employees.
+- Salaries visible to Admin and HR only. They are left out of the query
+  itself for other roles.
+- Salary changes are audited with the old and new values.
+- Each employee can see their own record and documents.
+
+**Documents**
+- Files on employees and products, stored in a private S3 bucket.
+- The file's type is checked from its content, not just its name.
+- Downloads are links that expire after 5 minutes.
+
+**Administration**
+- User accounts and roles. An admin can't lock themselves out.
+- A read-only audit log of sign-ins, access changes, stock movements,
+  orders, salary changes and document access.
+
+**Everywhere**
+- Light, dark and system themes.
+- Works on phones.
+- Keyboard-accessible dialogs.
+- Every page loads on its own and fails on its own.
+
+## How it is built
+
+```mermaid
+flowchart LR
+  B[Browser<br/>React SPA] -- "HTTPS, same origin" --> N[nginx<br/>static files + /api proxy]
+  N --> A[Express API]
+  A --> M[(MySQL)]
+  A --> S[(S3, private)]
+  B -. "presigned download, 5 min" .-> S
 ```
 
-`npm run migrate` is safe to re-run: applied migrations are recorded in
-`schema_migrations`. A database created from the old `schema.sql` is detected
-and baselined automatically. Schema changes go in a new numbered file in
-`database/migrations/`; never edit one that has been applied.
+The API is layered: `routes → middleware (auth, roles, validation) →
+controllers → services → models`. Rules that must always hold live in services
+and SQL, not in the UI. Some of the less obvious parts:
 
-Health checks: `GET /api/health/live` (process up) and `GET /api/health/ready` (database reachable; `/api/health` is an alias).
+- **No overselling.**
+  - Stock changes lock the product row (`SELECT … FOR UPDATE`).
+  - Multi-product orders lock their rows in id order, so two orders can't
+    deadlock.
+  - A `CHECK (quantity >= 0)` backs it up in the database.
+- **Sessions that can be revoked.**
+  - The JWT lives in an httpOnly, `SameSite=Strict` cookie.
+  - A per-user `token_version` is checked on every request, so signing out
+    everywhere, a password change, deactivation or a role change takes
+    effect immediately.
+- **Three levels of access control:**
+  - by role on each route;
+  - by record in the services (an employee reads only their own documents);
+  - by field in SQL (salary).
+- **Money is exact.** It is MySQL `DECIMAL` end to end, sent as strings in
+  JSON.
 
-Demo accounts: `admin@erp.com`, `hr@erp.com`, `manager@erp.com`, `employee@erp.com`.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the whole design: data
+model, request flow, security model, the reorder maths, and the trade-offs and
+known limits.
 
-`npm run seed:demo` adds a small IT-equipment distributor's last six months:
-departments and employees (each demo login linked to an HR record), 17 products
-in 6 categories, 10 customers and about 140 orders with a few cancellations and a
-mid-period restock. It goes through the same services as the API, so every
-product's stock is explained by its ledger (the script checks this), and it is
-deterministic: every run produces the same history. It only runs on a database
-with no products.
+### Why this stack
 
-## Environment variables
+- **MySQL with InnoDB.** An ERP's hard problems are transactional: stock,
+  money, and several people selling the last unit at once. Row locks, CHECK
+  constraints, foreign keys and `DECIMAL` solve them in the database. Each
+  is tested against a real MySQL, not a mock.
+- **Express, in plain layers.** There's no framework magic between a route
+  and its SQL, which keeps the code easy to read and to review. The
+  dependencies are few and each earns its place:
+  - helmet, express-validator and express-rate-limit;
+  - pino for logging;
+  - mysql2 and the AWS SDK.
+- **React without a UI kit.** A small design system written in plain CSS
+  (tokens for both themes, about fifteen components) gives full control over
+  accessibility and responsiveness. The first load is about 91 KB of gzipped
+  JavaScript.
+- **S3 for files.** The API never stores or streams file contents. Downloads
+  go straight from S3 with short-lived links.
 
-See `backend/.env.example` (and `.env.example` at the root for Docker Compose). Required: `DB_HOST`, `DB_USER`, `DB_NAME`, `JWT_SECRET`. The API checks the whole configuration at startup and lists every problem at once; the full table is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables-api). Optional: `AWS_REGION` + `S3_BUCKET_NAME` (document endpoints return 503 with a clear message when unset). On EC2, prefer an IAM instance role over access keys.
+## Development
 
-Frontend: `API_URL` (Vite dev proxy target, default `http://localhost:4000`) and `VITE_SHOW_DEMO_ACCOUNTS=true` to list the seeded demo accounts on the sign-in page of a demo build (they are always listed in development, never otherwise).
-
-`.env` is intentionally **not** committed or shipped — copy `.env.example` and fill it in per environment.
-
-**`TRUST_PROXY`** — set to `1` whenever the API runs behind nginx or a load balancer. Left at `0`, Express reports the proxy's address as `req.ip`, which collapses the login rate limiter into a single shared bucket for all users and writes the proxy IP into every audit log row.
-
-## API overview (45+ endpoints)
-
-| Area | Base path | Highlights |
-|---|---|---|
-| Auth | `/api/auth` | login (rate-limited), register (admin-only), me, profile (own HR record), logout, logout-all, change-password |
-| Users | `/api/users` | list, change role / activate / deactivate, reset password (admin) |
-| Categories | `/api/categories` | CRUD, FK-protected delete |
-| Products | `/api/products` | CRUD, search/filter/pagination, `/:id/stock`, `/:id/transactions` (paged ledger with running balance), `/alerts/low-stock`, `/insights/reorder` |
-| Customers | `/api/customers` | CRUD + search |
-| Orders | `/api/orders` | ADMIN/MANAGER only; create (atomic), cancel (restock), filters (status, customer, dates), `/reports/summary`, `/reports/daily`, `/reports/top-products`, `/reports/export` (CSV) |
-| Departments | `/api/departments` | CRUD (HR/Admin) |
-| Employees | `/api/employees` | CRUD (HR/Admin), field-level salary visibility |
-| Dashboard | `/api/dashboard` | summary, sales-trend, category-sales, top-products |
-| Documents | `/api/documents` | S3 upload, metadata list, presigned download URL (owner-scoped), delete |
-| Audit log | `/api/audit-logs` | ADMIN only, read-only; filter by action, user, dates; `/actions` |
-
-Request/response behaviour is pinned down by the integration tests in `backend/test/`; an OpenAPI reference is planned (see `docs/ROADMAP.md`, Phase 6).
-
-## Testing
-
-Backend integration tests (Vitest + Supertest) run against a real MySQL, because
-transactions and row locking are what they need to prove. They create and drop
-their own `erp_test` database.
+You need Node 20.19+ and MySQL 8.
 
 ```bash
 cd backend
-DB_PASSWORD=yourpassword npm test     # DB_HOST/DB_PORT/DB_USER default to 127.0.0.1:3306/root
+npm install
+cp .env.example .env        # database credentials and JWT secret; S3 optional
+npm run migrate             # creates the database, applies database/migrations
+npm run seed:demo           # demo logins + six months of data (npm run seed: logins only)
+npm run dev                 # API on http://localhost:4000, restarts on changes
+
+cd ../frontend              # in a second terminal
+npm install
+npm run dev                 # http://localhost:5173, proxies /api to the API
+```
+
+Schema changes go in a new numbered file in `database/migrations/`; `npm run
+migrate` applies anything new and is safe to re-run.
+
+Configuration:
+- **Backend:** everything is in `backend/.env.example`. The API checks it all
+  at startup and lists every problem at once. The full reference is in
+  [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#environment-variables-api).
+- **Frontend:**
+  - `API_URL` is the dev proxy target (default `http://localhost:4000`).
+  - `VITE_SHOW_DEMO_ACCOUNTS=true` lists the demo accounts on the sign-in
+    page of a production build. They are always listed in development.
+
+### Tests
+
+```bash
+cd backend
+DB_PASSWORD=yourpassword npm test   # needs a MySQL; uses its own erp_test database
 npm run lint
+cd ../frontend && npm run lint && npm run build
 ```
 
-Covered: config validation and health probes, login and role enforcement, field-level salary hiding, atomic order
-creation and rollback, concurrent stock-outs (no oversell), cancel-and-restock,
-constraint errors mapped to 409/400, validation of query parameters, and
-regression tests for each bug fixed in the audit (see `docs/ROADMAP.md`).
+There are 83 integration tests (Vitest + Supertest, against real MySQL). They
+cover:
+- role, record and field-level access, and session revocation;
+- atomic orders, rollbacks and concurrent stock-outs;
+- constraint errors;
+- CSV formula escaping;
+- the reorder maths, against hand-worked numbers;
+- configuration validation and health probes;
+- that the OpenAPI spec matches the real routes.
 
-## Screenshots
+CI runs all of it on every pull request. It then builds the Docker images,
+starts the stack and runs `scripts/smoke-test.sh` through nginx.
 
-*(placeholders — add after frontend build)*
+## Documentation
 
-- Login · Dashboard (admin) · Inventory list with low-stock badges · Order creation · Employee management (HR view vs Manager view)
-
-## Deployment
-
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers both routes:
-
-- **Docker Compose** on one VM: MySQL, a one-shot migration step, the API and nginx. The images run as non-root users, and the API container is also read-only.
-- **Without Docker**: systemd (`deploy/erp-api.service`) and nginx.
-
-It also covers HTTPS, `TRUST_PROXY`, the first admin (`npm run create-admin`), backups and restore, logs, health checks, S3 and a go-live checklist.
-
-After any deploy, `scripts/smoke-test.sh https://your-host` checks the stack end to end.
-
-CI (`.github/workflows/ci.yml`) runs on every pull request:
-
-- lint and the integration tests against MySQL 8.4;
-- the frontend build;
-- `npm audit`;
-- a job that builds both images, starts the compose stack and runs the smoke test.
+| | |
+|---|---|
+| [docs/API.md](docs/API.md) | Signing in, conventions, errors, the role matrix and examples |
+| [docs/openapi.yaml](docs/openapi.yaml) | OpenAPI 3.1 reference for all 57 endpoints |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design, data model, concurrency, security model, trade-offs |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker Compose or a plain VM: TLS, first admin, backups, monitoring, go-live checklist |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | How the project was upgraded, phase by phase, and why |
 
 ## Project structure
 
 ```
 erp-system/
-├── docker-compose.yml         # MySQL + migrate + API + web (nginx)
-├── .env.example               # settings for docker compose
-├── .github/workflows/ci.yml
-├── scripts/smoke-test.sh      # post-deploy check through the public URL
-├── deploy/erp-api.service     # systemd unit (non-Docker deploys)
-├── database/migrations/       # versioned SQL, applied by `npm run migrate`
-├── docs/                      # ROADMAP.md, DEPLOYMENT.md
 ├── backend/
-│   ├── Dockerfile
-│   ├── scripts/  migrate.js  seed.js  demo-data.js  create-admin.js
-│   ├── test/                  # Vitest + Supertest integration tests
-│   └── src/
-│       ├── app.js  server.js
-│       ├── config/     env.js  buildConfig.js (validation)  db.js  s3.js
-│       ├── middleware/ auth  roles  validate  upload  errorHandler  requestLogger
-│       ├── validators/ controllers/  services/  models/  routes/  utils/
-└── frontend/
-    ├── Dockerfile  nginx/default.conf.template
-    └── src/
-        ├── styles/                # tokens.css (themes), base, layout, components
-        ├── components/ui/         # Button, Field, Modal, Toast, ConfirmDialog, DataTable, …
-        ├── components/layout/     # AppShell (sidebar + top bar), ThemeSwitch, ErrorBoundary
-        ├── hooks/useApi.js        # useApi / usePagedList
-        ├── config/nav.js          # role access shared by the sidebar and route guards
-        ├── context/               # AuthContext, ThemeContext
-        └── pages/
+│   ├── src/
+│   │   ├── routes/ middleware/ validators/ controllers/ services/ models/
+│   │   ├── config/        validated env, MySQL pool, S3 client
+│   │   └── utils/         audit, errors, CSV, cookies, logger
+│   ├── scripts/           migrate, seed (+ demo data), create-admin
+│   ├── test/              integration tests
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── pages/         one folder per area (inventory, sales, hr, admin)
+│   │   ├── components/ui/ the design system
+│   │   ├── styles/        tokens (light + dark), base, layout, components
+│   │   ├── hooks/ context/ config/nav.js (role access, shared by menu and routes)
+│   ├── nginx/             production web server config
+│   └── Dockerfile
+├── database/migrations/   versioned SQL
+├── docs/                  API, OpenAPI, architecture, deployment, screenshots
+├── deploy/                systemd unit for non-Docker installs
+├── scripts/smoke-test.sh  post-deploy check
+├── docker-compose.yml     MySQL + migrations + API + web
+└── .github/workflows/     CI
 ```

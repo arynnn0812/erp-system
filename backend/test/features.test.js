@@ -141,7 +141,7 @@ describe('sales reports', () => {
 describe('profile', () => {
   it('returns the linked employee record, including the person\'s own salary', async () => {
     const dept = (await api(t.HR.token).post('/api/departments').send({ name: 'Ops' })).body.data;
-    await api(t.HR.token).post('/api/employees').send({
+    await api(t.ADMIN.token).post('/api/employees').send({ // linking a login is ADMIN-only
       name: 'Employee User', email: 'employee.hr@test.com', departmentId: dept.id,
       designation: 'Analyst', joiningDate: '2025-02-03', salary: 720000, userId: t.EMPLOYEE.id,
     });

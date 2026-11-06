@@ -4,7 +4,7 @@ Ordered by value: first make what exists **correct**, then **safe**, then
 **complete**, then **pleasant**, then **shippable**. Each phase ends with the
 test suite green and both apps building.
 
-**Status:** Phases 0–5 are done. Phase 4 was built before Phase 3 so the new
+**Status:** all phases (0–6) are done. Phase 4 was built before Phase 3 so the new
 feature pages were written once, on the finished design system.
 
 Guiding rules: keep the existing architecture (it is sound), add a dependency
@@ -83,7 +83,19 @@ Backend endpoints that already exist get a UI; a few high-value additions.
   demo accounts.
 - Strict Content-Security-Policy (the inline theme script became a file).
 
-## Phase 6 — Documentation & presentation
-- README rewrite: overview, architecture diagram, feature tour, stack rationale, setup.
-- `docs/ARCHITECTURE.md`, `docs/API.md` (OpenAPI spec), `docs/DEPLOYMENT.md`.
-- Real screenshots captured from the running app.
+## Phase 6 — Documentation & presentation ✅
+- README rewrite: overview, real screenshots, two-minute Docker start, feature
+  tour, architecture diagram, stack rationale, development setup.
+- `docs/ARCHITECTURE.md` (design, data model, concurrency, security model,
+  trade-offs and known limits), `docs/API.md` (guide with real examples) and
+  `docs/openapi.yaml` (OpenAPI 3.1, all 57 endpoints, validated with Redocly;
+  a test fails if it drifts from the registered routes). `docs/DEPLOYMENT.md`
+  was written in Phase 5.
+- Screenshots captured from the running app with the demo data
+  (`docs/screenshots/`).
+- Found while documenting, and fixed with tests:
+  - HR could link any login to any employee record through the API (only the
+    UI restricted it), which would hand that login the record's salary and
+    documents. Linking is now ADMIN-only in the service.
+  - `search` (products, employees) and `lowStock` were not validated.
+  - The admin dashboard's six stat cards wrapped 5 + 1 at laptop widths.

@@ -146,7 +146,7 @@ async function seedDemoData() {
     await hrService.createEmployee({
       name, email, departmentId: deptIds[dept], designation,
       joiningDate: sqlDate(daysAgo(joined)), salary, userId: linked?.id ?? null,
-    }, hr, '127.0.0.1');
+    }, linked ? admin : hr, '127.0.0.1'); // linking a login is ADMIN-only
   }
 
   // --- catalogue ----------------------------------------------------------

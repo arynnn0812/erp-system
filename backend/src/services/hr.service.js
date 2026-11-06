@@ -37,6 +37,15 @@ async function deleteDepartment(id) {
 
 // An employee may be linked to at most one login, and a login to at most one
 // employee - that link is what lets an EMPLOYEE read their own documents.
+// A linked login sees the record's salary (My profile) and can read its
+// documents, so only ADMIN may set or change the link. Leaving userId out, or
+// sending the current value, is not a change (the HR edit form omits it).
+function assertMayLink(userId, actor, current = null) {
+  if (userId === undefined || actor.role === 'ADMIN') return;
+  if ((userId ?? null) === current) return;
+  throw new ApiError(403, 'Only ADMIN can link an employee record to a login');
+}
+
 async function assertLinkableUser(userId, employeeId = null) {
   if (userId === null || userId === undefined) return;
   const user = await userModel.findById(userId);
@@ -53,6 +62,7 @@ async function createEmployee(data, actor, ip) {
 
   const dept = await departmentModel.findById(data.departmentId);
   if (!dept) throw new ApiError(400, 'Invalid departmentId');
+  assertMayLink(data.userId, actor);
   await assertLinkableUser(data.userId);
 
   const id = await employeeModel.create(data);
@@ -73,6 +83,7 @@ async function updateEmployee(id, data, actor, ip) {
   const dept = await departmentModel.findById(data.departmentId);
   if (!dept) throw new ApiError(400, 'Invalid departmentId');
 
+  assertMayLink(data.userId, actor, existing.user_id);
   // userId omitted (e.g. the HR edit form) keeps the current link.
   const userId = data.userId === undefined ? existing.user_id : data.userId;
   await assertLinkableUser(userId, id);

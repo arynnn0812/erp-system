@@ -63,6 +63,22 @@ describe('products', () => {
     const [rows] = await pool.query("SELECT id FROM products WHERE sku = 'ORPHAN-1'");
     expect(rows).toHaveLength(0);
   });
+
+  it('filters on lowStock=true only, and rejects other values', async () => {
+    const categoryId = await makeCategory(t.ADMIN.token);
+    const low = await makeProduct(t.ADMIN.token, { categoryId, quantity: 1, reorderLevel: 5 });
+    const ok = await makeProduct(t.ADMIN.token, { categoryId, quantity: 50, reorderLevel: 5 });
+    const ids = async (q) => (await api(t.ADMIN.token).get(`/api/products?categoryId=${categoryId}&${q}`)).body.rows.map((r) => r.id);
+    expect(await ids('lowStock=true')).toEqual([low]);
+    expect((await ids('lowStock=false')).sort()).toEqual([low, ok].sort());
+    expect((await api(t.ADMIN.token).get('/api/products?lowStock=maybe')).status).toBe(400);
+  });
+
+  it('validates the search filter', async () => {
+    const res = await api(t.ADMIN.token).get(`/api/products?search=${'x'.repeat(101)}`);
+    expect(res.status).toBe(400);
+    expect(res.body.errors[0].field).toBe('search');
+  });
 });
 
 describe('stock movements', () => {

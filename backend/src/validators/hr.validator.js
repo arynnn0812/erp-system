@@ -20,6 +20,7 @@ const employeeListRules = [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }),
   query('departmentId').optional().isInt({ min: 1 }),
+  query('search').optional().isString().trim().isLength({ max: 100 }),
 ];
 
 const idRule = [param('id').isInt({ min: 1 })];

@@ -26,6 +26,8 @@ const listRules = [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 100 }), // cap page size
   query('categoryId').optional().isInt({ min: 1 }),
+  query('search').optional().isString().trim().isLength({ max: 100 }),
+  query('lowStock').optional().isIn(['true', 'false']).withMessage('lowStock must be true or false'),
 ];
 
 const reorderRules = [

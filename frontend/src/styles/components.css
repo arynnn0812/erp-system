@@ -141,6 +141,11 @@
 
 /* ---------- stat cards ---------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-4); margin-bottom: var(--sp-5); }
+/* Six cards (the admin dashboard) would wrap 5 + 1 at laptop widths: cap at
+   three columns so they fall into even rows (3+3, then 2+2+2, then 1 each). */
+.stats:has(> :nth-child(6):last-child) {
+  grid-template-columns: repeat(auto-fit, minmax(max(190px, calc((100% - 2 * var(--sp-4)) / 3 - 1px)), 1fr));
+}
 .stat-card { display: flex; gap: var(--sp-3); align-items: flex-start; padding: var(--sp-4) var(--sp-5); }
 .stat-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); }
 .stat-icon.tone-success { background: var(--success-soft); color: var(--success); }

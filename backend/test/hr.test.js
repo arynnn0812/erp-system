@@ -61,15 +61,20 @@ describe('employees', () => {
     expect(res.status).toBe(409);
   });
 
+  it('validates the search filter on the employee list', async () => {
+    expect((await api(t.HR.token).get('/api/employees?search=Asha')).status).toBe(200);
+    expect((await api(t.HR.token).get(`/api/employees?search=${'x'.repeat(101)}`)).status).toBe(400);
+  });
+
   it('rejects a userId that does not exist with 400', async () => {
-    const res = await api(t.HR.token).post('/api/employees').send(employee({ userId: 9999 }));
+    const res = await api(t.ADMIN.token).post('/api/employees').send(employee({ userId: 9999 }));
     expect(res.status).toBe(400);
   });
 
   // B8
   it('links an employee to a login on update, which unlocks their own documents', async () => {
     const id = await create();
-    const res = await api(t.HR.token).put(`/api/employees/${id}`).send(employee({ userId: t.EMPLOYEE.id }));
+    const res = await api(t.ADMIN.token).put(`/api/employees/${id}`).send(employee({ userId: t.EMPLOYEE.id }));
     expect(res.status).toBe(200);
     expect((await api(t.HR.token).get(`/api/employees/${id}`)).body.data.user_id).toBe(t.EMPLOYEE.id);
 
@@ -78,6 +83,24 @@ describe('employees', () => {
     const other = await create();
     const theirs = await api(t.EMPLOYEE.token).get(`/api/documents?ownerType=EMPLOYEE&ownerId=${other}`);
     expect(theirs.status).toBe(403);
+  });
+});
+
+describe('linking an employee record to a login', () => {
+  // A linked login sees that record's salary and documents, so HR must not
+  // be able to hand someone else's record to an arbitrary account.
+  it('is ADMIN-only; HR edits that leave the link alone still work', async () => {
+    const id = await create();
+    const link = { userId: t.MANAGER.id };
+    expect((await api(t.HR.token).post('/api/employees').send(employee(link))).status).toBe(403);
+    expect((await api(t.HR.token).put(`/api/employees/${id}`).send(employee(link))).status).toBe(403);
+    expect((await api(t.ADMIN.token).put(`/api/employees/${id}`).send(employee(link))).status).toBe(200);
+
+    // HR: omitting userId, or sending the current value, keeps the link
+    expect((await api(t.HR.token).put(`/api/employees/${id}`).send(employee({ salary: 1300000 }))).status).toBe(200);
+    expect((await api(t.HR.token).put(`/api/employees/${id}`).send(employee(link))).status).toBe(200);
+    expect((await api(t.HR.token).put(`/api/employees/${id}`).send(employee({ userId: null }))).status).toBe(403);
+    expect((await api(t.HR.token).get(`/api/employees/${id}`)).body.data.user_id).toBe(t.MANAGER.id);
   });
 });
 

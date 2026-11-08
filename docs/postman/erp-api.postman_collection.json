@@ -1,0 +1,2409 @@
+{
+  "info": {
+    "name": "ERP System API",
+    "description": "Generated from docs/openapi.yaml by scripts/build-postman.js.\n\n1. Import this collection and docs/postman/local.postman_environment.json, and pick the \"ERP local\" environment.\n2. Run Auth > \"Sign in; sets the session cookie\". It saves {{token}}.\n3. Every other request sends it as a Bearer token.\n\nChange {{email}} in the environment to try another role (admin@, manager@, hr@, employee@erp.com).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "from",
+      "value": "2026-01-01"
+    },
+    {
+      "key": "to",
+      "value": "2026-12-31"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Liveness and readiness probes (no authentication)",
+      "item": [
+        {
+          "name": "Liveness - the process is up (never touches the database)",
+          "request": {
+            "name": "Liveness - the process is up (never touches the database)",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "health",
+                "live"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Readiness - MySQL answers within 2 s and the process is not shutting down",
+          "request": {
+            "name": "Readiness - MySQL answers within 2 s and the process is not shutting down",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "health",
+                "ready"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Alias of /api/health/ready",
+          "request": {
+            "name": "Alias of /api/health/ready",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "health"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Sessions, passwords and the signed-in user",
+      "item": [
+        {
+          "name": "Sign in; sets the session cookie",
+          "request": {
+            "name": "Sign in; sets the session cookie",
+            "description": {
+              "content": "Wrong email and wrong password give the same 401, in the same time,\nso accounts cannot be enumerated. Only failed attempts count toward\nthe login rate limit. Every attempt is written to the audit log.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Saves the token so every other request is signed in.",
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set(\"token\", pm.response.json().data.token);",
+                  "}",
+                  "pm.test(\"signed in\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clear the session cookie on this device",
+          "request": {
+            "name": "Clear the session cookie on this device",
+            "description": {},
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {},
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "End every session of this user, on every device",
+          "request": {
+            "name": "End every session of this user, on every device",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "logout-all"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {}
+          }
+        },
+        {
+          "name": "Change own password; other sessions are signed out, this one gets a new token",
+          "request": {
+            "name": "Change own password; other sessions are signed out, this one gets a new token",
+            "description": {
+              "content": "Roles - any signed-in user. Shares the failed-login rate limit.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "change-password"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"<string>\",\n  \"newPassword\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "The signed-in user",
+          "request": {
+            "name": "The signed-in user",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Own account plus own HR record (including own salary)",
+          "request": {
+            "name": "Own account plus own HR record (including own salary)",
+            "description": {
+              "content": "Roles - any signed-in user. `employee` is null when the login has no linked HR record.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "profile"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Create a login account",
+          "request": {
+            "name": "Create a login account",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"email\": \"<email>\",\n  \"password\": \"<string>\",\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "Login accounts and access (ADMIN)",
+      "item": [
+        {
+          "name": "All login accounts",
+          "request": {
+            "name": "All login accounts",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "users"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Change a user's role or activate/deactivate them",
+          "request": {
+            "name": "Change a user's role or activate/deactivate them",
+            "description": {
+              "content": "Roles - ADMIN. Either change signs the user out everywhere. An admin\ncannot change their own role or status (409), so the last admin\ncannot lock everyone out.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "users",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MANAGER\",\n  \"isActive\": \"<boolean>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Set a new password for a user; their sessions are signed out",
+          "request": {
+            "name": "Set a new password for a user; their sessions are signed out",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "users",
+                ":id",
+                "reset-password"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "description": "Categories, products, stock movements and reorder planning",
+      "item": [
+        {
+          "name": "All categories with their product counts",
+          "request": {
+            "name": "All categories with their product counts",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "categories"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Create a category",
+          "request": {
+            "name": "Create a category",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "categories"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Rename a category",
+          "request": {
+            "name": "Rename a category",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "categories",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete an empty category",
+          "request": {
+            "name": "Delete an empty category",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "categories",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {}
+          }
+        },
+        {
+          "name": "Active products, searched and paged",
+          "request": {
+            "name": "Active products, searched and paged",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "<string>",
+                  "disabled": true
+                },
+                {
+                  "key": "categoryId",
+                  "value": "<integer>",
+                  "disabled": true
+                },
+                {
+                  "key": "lowStock",
+                  "value": "false",
+                  "disabled": false
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Create a product; opening stock is recorded as an IN movement",
+          "request": {
+            "name": "Create a product; opening stock is recorded as an IN movement",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"sku\": \"<string>\",\n  \"categoryId\": \"<integer>\",\n  \"price\": \"<number>\",\n  \"quantity\": \"<integer>\",\n  \"reorderLevel\": \"<integer>\",\n  \"supplier\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Products below their reorder level",
+          "request": {
+            "name": "Products below their reorder level",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                "alerts",
+                "low-stock"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Reorder plan - sales velocity, days of stock left, suggested quantity",
+          "request": {
+            "name": "Reorder plan - sales velocity, days of stock left, suggested quantity",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.\n\n`daily_velocity` = units sold in confirmed orders over the last `days`\ndays / `days`. `suggested_qty` = ceil(velocity x `cover` + reorder level\n- quantity), at least 0. `status` is OUT (no stock), REORDER (below\nreorder level, or runs out within `leadTime` days) or OK. Sorted OUT,\nthen REORDER, then by days of stock left.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                "insights",
+                "reorder"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30",
+                  "disabled": false
+                },
+                {
+                  "key": "cover",
+                  "value": "30",
+                  "disabled": false
+                },
+                {
+                  "key": "leadTime",
+                  "value": "7",
+                  "disabled": false
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "One product",
+          "request": {
+            "name": "One product",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Update a product's details (stock changes go through /stock)",
+          "request": {
+            "name": "Update a product's details (stock changes go through /stock)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. `quantity` is ignored here.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"sku\": \"<string>\",\n  \"categoryId\": \"<integer>\",\n  \"price\": \"<number>\",\n  \"quantity\": \"<integer>\",\n  \"reorderLevel\": \"<integer>\",\n  \"supplier\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Deactivate a product (soft delete; order history keeps it)",
+          "request": {
+            "name": "Deactivate a product (soft delete; order history keeps it)",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {}
+          }
+        },
+        {
+          "name": "Record a stock movement (IN or OUT)",
+          "request": {
+            "name": "Record a stock movement (IN or OUT)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. Runs in a transaction with the product row\nlocked, so concurrent movements cannot oversell or lose an update.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "stock"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"OUT\",\n  \"quantity\": \"<integer>\",\n  \"reference\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Stock ledger for one product, newest first, with the balance after each movement",
+          "request": {
+            "name": "Stock ledger for one product, newest first, with the balance after each movement",
+            "description": {
+              "content": "Roles - any signed-in user. Also returned under `data` for older clients.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "transactions"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales",
+      "description": "Customers, orders and sales reports",
+      "item": [
+        {
+          "name": "Customers, searched (name, email, phone) and paged",
+          "request": {
+            "name": "Customers, searched (name, email, phone) and paged",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "customers"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "<string>",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Create a customer",
+          "request": {
+            "name": "Create a customer",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "customers"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"email\": \"<email>\",\n  \"phone\": \"<string>\",\n  \"address\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "One customer",
+          "request": {
+            "name": "One customer",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "customers",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Update a customer",
+          "request": {
+            "name": "Update a customer",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "customers",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"email\": \"<email>\",\n  \"phone\": \"<string>\",\n  \"address\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Orders, filtered and paged, newest first",
+          "request": {
+            "name": "Orders, filtered and paged, newest first",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "customerId",
+                  "value": "<integer>",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "PENDING",
+                  "disabled": false
+                },
+                {
+                  "key": "from",
+                  "value": "{{from}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{to}}"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Create an order - stock check, stock-out and order rows in one transaction",
+          "request": {
+            "name": "Create an order - stock check, stock-out and order rows in one transaction",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. Product rows are locked in id order (so two\norders cannot deadlock), every line is checked against current stock,\nand either the whole order is written - order, items, stock\nmovements `ORDER-<id>` - or nothing is. Prices are copied from the\nproduct at this moment, so later price changes do not alter old orders.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"<integer>\",\n  \"items\": [\n    {\n      \"productId\": \"<integer>\",\n      \"quantity\": \"<integer>\"\n    }\n  ],\n  \"taxPercent\": 0,\n  \"discount\": 0\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "One order with its items (the invoice)",
+          "request": {
+            "name": "One order with its items (the invoice)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Cancel a confirmed order and return its stock",
+          "request": {
+            "name": "Cancel a confirmed order and return its stock",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. Writes IN movements `ORDER-<id>-CANCEL`, in one transaction.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders",
+                ":id",
+                "cancel"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {}
+          }
+        },
+        {
+          "name": "Revenue, order count and average order value for a date range",
+          "request": {
+            "name": "Revenue, order count and average order value for a date range",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. Confirmed orders only.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders",
+                "reports",
+                "summary"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{from}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{to}}"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Best sellers by units sold for a date range (confirmed orders)",
+          "request": {
+            "name": "Best sellers by units sold for a date range (confirmed orders)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders",
+                "reports",
+                "top-products"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{from}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{to}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "disabled": false
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Orders and revenue per day (days without sales are omitted)",
+          "request": {
+            "name": "Orders and revenue per day (days without sales are omitted)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders",
+                "reports",
+                "daily"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{from}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{to}}"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Every order in a date range as CSV (all statuses)",
+          "request": {
+            "name": "Every order in a date range as CSV (all statuses)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. UTF-8 with a BOM (so Excel reads it\ncorrectly), CRLF line endings. Cells a spreadsheet would run as a\nformula (starting with = + - @ tab or CR) get a leading apostrophe.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "orders",
+                "reports",
+                "export"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{from}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{to}}"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/csv"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "HR",
+      "description": "Departments and employees (salary visible to ADMIN and HR only)",
+      "item": [
+        {
+          "name": "All departments with employee counts",
+          "request": {
+            "name": "All departments with employee counts",
+            "description": {
+              "content": "Roles - any signed-in user.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "departments"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Create a department",
+          "request": {
+            "name": "Create a department",
+            "description": {
+              "content": "Roles - ADMIN, HR.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "departments"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Rename a department",
+          "request": {
+            "name": "Rename a department",
+            "description": {
+              "content": "Roles - ADMIN, HR.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "departments",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete an empty department",
+          "request": {
+            "name": "Delete an empty department",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "departments",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {}
+          }
+        },
+        {
+          "name": "Employees, searched and paged",
+          "request": {
+            "name": "Employees, searched and paged",
+            "description": {
+              "content": "Roles - ADMIN, HR, MANAGER. `salary` is only selected for ADMIN and\nHR: for MANAGER it is absent from the SQL, not just hidden.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "employees"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "<string>",
+                  "disabled": true
+                },
+                {
+                  "key": "departmentId",
+                  "value": "<integer>",
+                  "disabled": true
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Add an employee",
+          "request": {
+            "name": "Add an employee",
+            "description": {
+              "content": "Roles - ADMIN, HR. Only ADMIN may set or change `userId` (the link to a\nlogin, which lets that login see this record's salary and documents);\nHR gets 403 for it.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "employees"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"email\": \"<email>\",\n  \"departmentId\": \"<integer>\",\n  \"designation\": \"<string>\",\n  \"joiningDate\": \"<date>\",\n  \"salary\": \"<number>\",\n  \"userId\": \"<integer,null>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "One employee (salary for ADMIN and HR only)",
+          "request": {
+            "name": "One employee (salary for ADMIN and HR only)",
+            "description": {
+              "content": "Roles - ADMIN, HR, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "employees",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Update an employee; salary changes are audited with old and new values",
+          "request": {
+            "name": "Update an employee; salary changes are audited with old and new values",
+            "description": {
+              "content": "Roles - ADMIN, HR. Omitting `userId` keeps the current link; only ADMIN may change it.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "employees",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"<string>\",\n  \"email\": \"<email>\",\n  \"departmentId\": \"<integer>\",\n  \"designation\": \"<string>\",\n  \"joiningDate\": \"<date>\",\n  \"salary\": \"<number>\",\n  \"userId\": \"<integer,null>\"\n}",
+              "options": {
+                "raw": {
+                  "headerFamily": "json",
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete an employee who has no documents",
+          "request": {
+            "name": "Delete an employee who has no documents",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "employees",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "description": "Role-aware headline numbers and charts",
+      "item": [
+        {
+          "name": "Headline numbers - which ones depends on the role",
+          "request": {
+            "name": "Headline numbers - which ones depends on the role",
+            "description": {
+              "content": "Roles - any signed-in user. Everyone gets the inventory figures;\nADMIN and MANAGER also get sales; ADMIN and HR also get headcount.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "dashboard",
+                "summary"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Live updates - Server-Sent Events",
+          "request": {
+            "name": "Live updates - Server-Sent Events",
+            "description": {
+              "content": "Roles - any signed-in user. Opened with `EventSource` in the browser\n(the session cookie is sent) or any client that sends the Bearer\ntoken. The connection stays open and receives:\n\n- `event: ready` once, when the stream is open;\n- `event: change` with `data: {\"topic\":\"dashboard\"}` after a\n  successful write to products, categories, customers, orders or\n  employees (a burst within 0.5 s is one event);\n- a `: ping` comment every 25 s.\n\nEvents carry no business data: refetch the dashboard endpoints, which\napply the role rules. The stream ends when the session stops being\nvalid (logout-all, deactivation, role change, expiry). At most 5 open\nstreams per user. Single-instance: see docs/ARCHITECTURE.md.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "dashboard",
+                "stream"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Confirmed orders and revenue per month",
+          "request": {
+            "name": "Confirmed orders and revenue per month",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "dashboard",
+                "sales-trend"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "months",
+                  "value": "6",
+                  "disabled": false
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Revenue and units by category (confirmed orders)",
+          "request": {
+            "name": "Revenue and units by category (confirmed orders)",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "dashboard",
+                "category-sales"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Best sellers of the last 90 days",
+          "request": {
+            "name": "Best sellers of the last 90 days",
+            "description": {
+              "content": "Roles - ADMIN, MANAGER. `window` gives the dates used.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "dashboard",
+                "top-products"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "disabled": false
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Files stored in S3. Return 503 when storage is not configured.",
+      "item": [
+        {
+          "name": "Documents attached to an employee or a product",
+          "request": {
+            "name": "Documents attached to an employee or a product",
+            "description": {
+              "content": "Product documents - any signed-in user. Employee documents - ADMIN,\nHR, and the employee themselves (via the linked login). Anyone else\ngets the same 403 whether or not the employee exists.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "documents"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "ownerType",
+                  "value": "EMPLOYEE",
+                  "disabled": false
+                },
+                {
+                  "key": "ownerId",
+                  "value": "1"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Upload a file (PDF, PNG, JPEG or DOCX, at most 5 MB)",
+          "request": {
+            "name": "Upload a file (PDF, PNG, JPEG or DOCX, at most 5 MB)",
+            "description": {
+              "content": "Product documents - ADMIN, MANAGER. Employee documents - ADMIN, HR.\nThe file's first bytes must match its declared type (415 otherwise),\nso a renamed executable is rejected.\n",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "documents"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  },
+                  "key": "file",
+                  "type": "file"
+                },
+                {
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  },
+                  "key": "ownerType",
+                  "value": "PRODUCT",
+                  "type": "text"
+                },
+                {
+                  "description": {
+                    "content": "(Required) ",
+                    "type": "text/plain"
+                  },
+                  "key": "ownerId",
+                  "value": "<integer>",
+                  "type": "text"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "A download link valid for 5 minutes (presigned S3 URL)",
+          "request": {
+            "name": "A download link valid for 5 minutes (presigned S3 URL)",
+            "description": {
+              "content": "Same access rules as listing. Each download is audited.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "documents",
+                ":id",
+                "url"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "Delete a document and its file",
+          "request": {
+            "name": "Delete a document and its file",
+            "description": {
+              "content": "Same rules as uploading.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "documents",
+                ":id"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "1"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "DELETE",
+            "body": {}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit",
+      "description": "The append-only audit log (ADMIN)",
+      "item": [
+        {
+          "name": "The audit log, newest first, filtered and paged",
+          "request": {
+            "name": "The audit log, newest first, filtered and paged",
+            "description": {
+              "content": "Roles - ADMIN. The log is append-only; there is no endpoint to change it.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "audit-logs"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "25",
+                  "disabled": false
+                },
+                {
+                  "key": "action",
+                  "value": "<string>",
+                  "disabled": true
+                },
+                {
+                  "key": "entity",
+                  "value": "<string>",
+                  "disabled": true
+                },
+                {
+                  "key": "userId",
+                  "value": "<integer>",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "{{from}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{to}}"
+                }
+              ],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        },
+        {
+          "name": "The distinct action names present in the log (for filters)",
+          "request": {
+            "name": "The distinct action names present in the log (for filters)",
+            "description": {
+              "content": "Roles - ADMIN.",
+              "type": "text/plain"
+            },
+            "url": {
+              "path": [
+                "api",
+                "audit-logs",
+                "actions"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "method": "GET",
+            "body": {}
+          }
+        }
+      ]
+    }
+  ]
+}

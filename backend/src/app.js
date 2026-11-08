@@ -21,6 +21,7 @@ const documentRoutes = require('./routes/document.routes');
 const auditRoutes = require('./routes/audit.routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const requestLogger = require('./middleware/requestLogger');
+const notifyChanges = require('./middleware/notifyChanges');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -55,6 +56,7 @@ app.use('/api', rateLimit({
 }));
 
 // --- Routes ---
+app.use(notifyChanges); // tells live dashboards about successful writes
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

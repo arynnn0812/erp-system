@@ -354,3 +354,15 @@ body.modal-open { overflow: hidden; }
 .inline-field.check { gap: 8px; color: var(--text-2); cursor: pointer; }
 .inline-field.check input { width: 16px; height: 16px; accent-color: var(--primary); }
 .json-block { margin: 0; padding: var(--sp-4); border-radius: 8px; background: var(--surface-2); font-family: var(--font-mono); font-size: var(--text-sm); white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow: auto; }
+
+/* Live-update indicator (dashboard header) */
+.live-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-xs); font-weight: 600; color: var(--muted);
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+}
+.live-badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.live-badge[data-status="live"] { color: var(--success); }
+.live-badge[data-status="live"]::before { background: var(--success); animation: live-pulse 2s ease-in-out infinite; }
+.live-badge[data-status="polling"]::before { background: var(--warning); }
+@keyframes live-pulse { 50% { opacity: 0.35; } }

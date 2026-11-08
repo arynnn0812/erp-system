@@ -3,6 +3,7 @@ const app = require('./app');
 const config = require('./config/env');
 const logger = require('./utils/logger');
 const lifecycle = require('./utils/lifecycle');
+const events = require('./utils/events');
 const { pool, testConnection } = require('./config/db');
 const { version } = require('../package.json');
 
@@ -46,7 +47,7 @@ async function start() {
   });
 
   // Graceful shutdown (deploys, docker stop, Ctrl+C): report not-ready, stop
-  // accepting new connections, let in-flight requests - and their open
+  // accepting new connections, end live streams, let in-flight requests - and their open
   // transactions - finish, then close the pool. Forced exit after 10s.
   const shutdown = (signal) => {
     if (lifecycle.isShuttingDown()) return;
@@ -56,6 +57,7 @@ async function start() {
       logger.error('shutdown timed out, forcing exit');
       process.exit(1);
     }, 10_000).unref();
+    events.closeAll(); // live dashboard streams would hold server.close() open
     server.close(async () => {
       await pool.end();
       logger.info('shutdown complete');

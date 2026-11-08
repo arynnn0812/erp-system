@@ -1140,6 +1140,35 @@ paths:
                       total_customers: { type: integer }
                       total_employees: { type: integer }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/dashboard/stream:
+    get:
+      operationId: streamDashboardChanges
+      tags: [Dashboard]
+      summary: Live updates - Server-Sent Events
+      description: |
+        Roles - any signed-in user. Opened with `EventSource` in the browser
+        (the session cookie is sent) or any client that sends the Bearer
+        token. The connection stays open and receives:
+
+        - `event: ready` once, when the stream is open;
+        - `event: change` with `data: {"topic":"dashboard"}` after a
+          successful write to products, categories, customers, orders or
+          employees (a burst within 0.5 s is one event);
+        - a `: ping` comment every 25 s.
+
+        Events carry no business data: refetch the dashboard endpoints, which
+        apply the role rules. The stream ends when the session stops being
+        valid (logout-all, deactivation, role change, expiry). At most 5 open
+        streams per user. Single-instance: see docs/ARCHITECTURE.md.
+      responses:
+        '200':
+          description: An open event stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+              example: "retry: 5000\nevent: ready\ndata: {}\n\nevent: change\ndata: {\"topic\":\"dashboard\"}\n\n"
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /api/dashboard/sales-trend:
     get:
       operationId: getSalesTrend

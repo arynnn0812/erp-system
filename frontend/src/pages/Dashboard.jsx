@@ -1,12 +1,14 @@
 // Role-aware dashboard: renders whichever numbers the API returned for this
 // role (the backend already did the shaping), charts only for ADMIN/MANAGER.
-import { useMemo } from 'react';
+// Refreshes itself when the API reports a change (see useLiveUpdates).
+import { useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useApi } from '../hooks/useApi.js';
+import { useLiveUpdates } from '../hooks/useLiveUpdates.js';
 import DataTable from '../components/ui/DataTable.jsx';
 import { Alert, Card, EmptyState, PageHeader, Skeleton, StatCard } from '../components/ui/index.jsx';
 import { inr, inrCompact, monthLabel } from '../utils/format.js';
@@ -30,6 +32,17 @@ function fillMonths(rows, months) {
   return out;
 }
 
+const LIVE_LABEL = {
+  live: { text: 'Live', title: 'Updates as soon as orders, stock or staff change' },
+  connecting: { text: 'Connecting…', title: 'Connecting to live updates' },
+  polling: { text: 'Auto-refresh', title: 'Live updates unavailable; refreshing every minute' },
+};
+
+function LiveBadge({ status }) {
+  const { text, title } = LIVE_LABEL[status];
+  return <span className="live-badge" data-status={status} title={title} role="status">{text}</span>;
+}
+
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -44,6 +57,14 @@ export default function Dashboard() {
   const trend = useApi(seesSales ? '/dashboard/sales-trend' : null, { months: TREND_MONTHS });
   const categories = useApi(seesSales ? '/dashboard/category-sales' : null);
   const top = useApi(seesSales ? '/dashboard/top-products' : null, { limit: 5 });
+
+  // reload() is stable per hook, so this is too. Refreshes keep the current
+  // figures on screen until the new ones arrive (see `first` below).
+  const { reload: r1 } = summary, { reload: r2 } = trend, { reload: r3 } = categories, { reload: r4 } = top;
+  const reloadAll = useCallback(() => { r1(); r2(); r3(); r4(); }, [r1, r2, r3, r4]);
+  const live = useLiveUpdates(reloadAll);
+  // Skeletons only on the first load, not on every live refresh.
+  const first = (q) => q.loading && q.data === undefined;
 
   const s = summary.data || {};
   const trendData = useMemo(() => fillMonths(trend.data || [], TREND_MONTHS), [trend.data]);
@@ -69,9 +90,10 @@ export default function Dashboard() {
       <PageHeader
         title={`${greeting()}, ${user.name.split(' ')[0]}`}
         description="Here's how the business is doing today."
-        actions={hasRole('ADMIN', 'MANAGER') && (
-          <Link to="/orders/new" className="btn btn-primary">New order</Link>
-        )}
+        actions={<>
+          <LiveBadge status={live} />
+          {hasRole('ADMIN', 'MANAGER') && <Link to="/orders/new" className="btn btn-primary">New order</Link>}
+        </>}
       />
 
       <Alert>{summary.error && 'Could not load the dashboard. Check the API is running, then refresh.'}</Alert>
@@ -94,7 +116,7 @@ export default function Dashboard() {
           <div className="grid-2">
             <Card title="Revenue" subtitle={`Confirmed orders, last ${TREND_MONTHS} months`} pad>
               <div className="chart-box">
-                {trend.loading ? <Skeleton height="100%" /> : !hasTrend ? (
+                {first(trend) ? <Skeleton height="100%" /> : !hasTrend ? (
                   <EmptyState icon="chart" title="No sales yet" message="Revenue appears here once orders are placed." />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
@@ -119,7 +141,7 @@ export default function Dashboard() {
 
             <Card title="Sales by category" subtitle="All-time confirmed revenue" pad>
               <div className="chart-box">
-                {categories.loading ? <Skeleton height="100%" /> : pieData.length === 0 ? (
+                {first(categories) ? <Skeleton height="100%" /> : pieData.length === 0 ? (
                   <EmptyState icon="layers" title="No category sales yet" message="Each category's share of revenue appears here." />
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -151,7 +173,7 @@ export default function Dashboard() {
           <Card title="Top products" subtitle="By units sold, last 90 days">
             <DataTable
               caption="Top products by units sold"
-              loading={top.loading}
+              loading={first(top)}
               error={top.error}
               rows={top.data || []}
               empty={{ icon: 'box', title: 'No sales in the last 90 days' }}

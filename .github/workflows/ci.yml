@@ -1,6 +1,6 @@
 # Runs on every pull request and every push to main:
 #   api     - lint, the integration tests against a real MySQL, dependency audit
-#   web     - lint, production build
+#   web     - lint, component tests, production build
 #   docker  - builds both images, starts the whole stack with docker compose
 #             and runs scripts/smoke-test.sh against it
 name: CI
@@ -57,7 +57,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
   web:
-    name: Web · lint, build
+    name: Web · lint, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -72,6 +72,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high

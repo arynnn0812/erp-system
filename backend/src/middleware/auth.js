@@ -44,6 +44,8 @@ async function authenticate(req, res, next) {
     }
     // Role from the database, not the token: a demotion takes effect now.
     req.user = { id: user.id, role: user.role };
+    // Kept for long-lived requests (the live stream) that re-check the session.
+    req.auth = { tv: payload.tv, exp: payload.exp };
     next();
   } catch (err) {
     next(err);

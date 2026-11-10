@@ -4,7 +4,7 @@ Ordered by value: first make what exists **correct**, then **safe**, then
 **complete**, then **pleasant**, then **shippable**. Each phase ends with the
 test suite green and both apps building.
 
-**Status:** all phases (0–6) are done. Phase 4 was built before Phase 3 so the new
+**Status:** all phases (0–7) are done. Phase 4 was built before Phase 3 so the new
 feature pages were written once, on the finished design system.
 
 Guiding rules: keep the existing architecture (it is sound), add a dependency
@@ -88,7 +88,7 @@ Backend endpoints that already exist get a UI; a few high-value additions.
   tour, architecture diagram, stack rationale, development setup.
 - `docs/ARCHITECTURE.md` (design, data model, concurrency, security model,
   trade-offs and known limits), `docs/API.md` (guide with real examples) and
-  `docs/openapi.yaml` (OpenAPI 3.1, all 57 endpoints, validated with Redocly;
+  `docs/openapi.yaml` (OpenAPI 3.1, all 57 endpoints at the time, validated with Redocly;
   a test fails if it drifts from the registered routes). `docs/DEPLOYMENT.md`
   was written in Phase 5.
 - Screenshots captured from the running app with the demo data
@@ -99,3 +99,28 @@ Backend endpoints that already exist get a UI; a few high-value additions.
     documents. Linking is now ADMIN-only in the service.
   - `search` (products, employees) and `lowStock` were not validated.
   - The admin dashboard's six stat cards wrapped 5 + 1 at laptop widths.
+
+## Phase 7 — Live dashboard, frontend tests, Postman ✅
+- The dashboard updates live. Successful writes publish a change on an
+  in-process bus, and `GET /api/dashboard/stream` (Server-Sent Events)
+  forwards it. The page then refetches through the role-checked endpoints.
+  - The stream checks the session again on every heartbeat and before each
+    event. It is capped at 5 per user and ended on shutdown.
+  - The browser falls back to polling, and retries the stream, when it is
+    refused. Found while testing: during an API restart, the proxy's 502
+    left the dashboard on polling for good.
+  - 7 integration tests.
+- Frontend tests. Vitest, Testing Library and jsdom, 22 tests:
+  - navigation per role and the route guard;
+  - sign-in;
+  - the dashboard per role and its live refresh;
+  - the live-update hook.
+
+  They run in CI.
+- Postman collection, generated from `docs/openapi.yaml` by
+  `scripts/build-postman.js`. The generator runs with a seeded random
+  source, so regenerating gives the same file. Sign in once and every
+  request is authenticated. Its GET requests were run with Newman against
+  the demo data.
+- Not done: deploying to a public host (AWS or another). It needs the
+  owner's cloud account. `docs/DEPLOYMENT.md` has the steps.

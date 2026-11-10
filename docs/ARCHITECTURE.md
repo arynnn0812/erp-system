@@ -241,6 +241,45 @@ There is no API to change or delete entries. The IP is only right when
 5. Without S3 settings the document endpoints return 503 with a clear
    message, and everything else keeps working.
 
+## Live dashboard
+
+The dashboard refreshes itself when the data behind it changes, without
+polling the database.
+
+1. `middleware/notifyChanges.js` watches every request under products,
+   categories, customers, orders and employees. When a write (anything but
+   GET) finishes with a 2xx or 3xx status, it publishes a `dashboard` change
+   on an in-process event bus (`utils/events.js`). A burst of writes within
+   0.5 s is one event.
+2. `GET /api/dashboard/stream` is a Server-Sent Events response. Each open
+   stream forwards the change as `event: change`, and sends a `: ping`
+   comment every 25 s, under nginx's 60 s read timeout. `X-Accel-Buffering:
+   no` stops nginx from holding events back.
+3. In the browser, `useLiveUpdates` opens an `EventSource`, and on each
+   change the dashboard refetches its endpoints. The figures stay on screen
+   while the new ones load.
+
+Design decisions:
+- **No data in events.** An event only says "something changed". The
+  refetch goes through the normal endpoints, which apply the role rules, so
+  the stream cannot leak a figure its viewer may not see.
+- **SSE, not WebSockets.** Traffic is one-way, from server to browser. SSE is
+  plain HTTP: it carries the session cookie, passes through nginx and the
+  Vite proxy, and reconnects by itself. It needs no new dependency on either
+  side.
+- **Sessions are checked again.** A stream outlives the request that
+  opened it. On every heartbeat, and before forwarding a change, it checks
+  the session again. Logout-everywhere, deactivation, a role change or
+  expiry ends the stream.
+- **Limits.** Each user may have 5 open streams. On shutdown every stream is
+  ended, so that `server.close()` is not held open until the forced exit.
+- **Fallbacks.** After a network drop, `EventSource` reconnects and the
+  dashboard refreshes once, to catch anything it missed. After an error
+  response, such as a 502 while the API restarts or a 401, the browser stops
+  retrying. The hook then polls every minute and tries the stream again
+  every 30 s. A badge in the header shows the state: Live, Connecting or
+  Auto-refresh.
+
 ## Frontend
 
 - **Stack.** React 18 and React Router 7, built by Vite. No UI library: a
@@ -287,7 +326,7 @@ There is no API to change or delete entries. The IP is only right when
 
 ## Testing
 
-- **Integration tests against real MySQL.** 83 tests in `backend/test`
+- **Integration tests against real MySQL.** 90 tests in `backend/test`
   (Vitest + Supertest), on a database they create and drop. The interesting
   failures are about transactions, locks and constraints, which a mocked
   database would not reproduce.
@@ -300,15 +339,30 @@ There is no API to change or delete entries. The IP is only right when
   - CSV formula escaping;
   - the reorder math, against hand-computed values;
   - configuration validation and the health probes;
+  - the live stream: roles, coalescing, silence on reads and failed writes,
+    revocation, the per-user cap and shutdown. These run against a real
+    listening port;
   - that `docs/openapi.yaml` matches the registered routes.
+- **Frontend tests.** 22 tests in `frontend/test` (Vitest + Testing
+  Library, in jsdom), with the API mocked:
+  - the menu per role and the route guard;
+  - sign-in, including the redirect back and the error message;
+  - which endpoints the dashboard calls for each role;
+  - refreshing on a live event;
+  - the live-update hook, driven by a fake `EventSource` and fake timers:
+    reconnect, polling fallback, retry and cleanup.
 - **CI** (`.github/workflows/ci.yml`):
   - lint, the tests on MySQL 8.4, and dependency audits;
-  - the frontend build;
+  - the frontend tests and build;
   - a job that builds the Docker images, starts the stack and runs
     `scripts/smoke-test.sh` through nginx.
 
 ## Trade-offs and known limits
 
+- **Live updates are per process.** The event bus is in memory, so with
+  several API instances a write reaches only the streams on its own
+  instance; dashboards connected to another one miss it until their next
+  refresh. Redis pub/sub would make the bus shared.
 - **Rate limits are per process.** The counters live in memory. With N API
   instances a client gets roughly N times the limit. A shared store (Redis)
   is the fix before scaling out.

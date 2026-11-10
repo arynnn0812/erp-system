@@ -14,6 +14,13 @@ npx @redocly/cli preview-docs docs/openapi.yaml    # http://localhost:8080
 
 or paste the file into https://editor.swagger.io.
 
+**Postman.** Import `docs/postman/erp-api.postman_collection.json` and
+`docs/postman/local.postman_environment.json`, then pick the "ERP local"
+environment. Run Auth → "Sign in": it saves the token, and every other request
+sends it. Change `email` in the environment to try another role. The
+collection is generated from the spec; after changing the spec, run
+`node scripts/build-postman.js`.
+
 The examples below are real responses from the demo data
 (`npm run seed:demo`), against the API on `http://localhost:4000`. Through
 the Docker stack, use `http://localhost:8080` instead.
@@ -207,6 +214,13 @@ Roles are in brackets. "signed in" means any role.
 
 **Dashboard**: `GET /api/dashboard/summary` (signed in; the fields depend on the role) ·
 `GET /api/dashboard/sales-trend`, `/category-sales`, `/top-products` (ADMIN, MANAGER)
+
+**Live updates**: `GET /api/dashboard/stream` (signed in) is a Server-Sent
+Events stream. It sends `event: change` with `data: {"topic":"dashboard"}`
+within about half a second of any successful write to products, categories,
+customers, orders or employees, and a `: ping` comment every 25 seconds. The
+event carries no figures; refetch the endpoints above. Try it with
+`curl -N -H "Authorization: Bearer $TOKEN" http://localhost:4000/api/dashboard/stream`.
 
 **Documents** (S3; 503 until storage is configured): `GET /api/documents?ownerType=&ownerId=` ·
 `POST /api/documents` (multipart: file, ownerType, ownerId) · `GET /api/documents/{id}/url`

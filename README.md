@@ -88,6 +88,13 @@ explained by its ledger.
 - A read-only audit log of sign-ins, access changes, stock movements,
   orders, salary changes and document access.
 
+**Dashboard**
+- Headline figures and sales charts, shaped by role: sales for Admin and
+  Manager, headcount for Admin and HR.
+- Updates live. A change to orders, stock, customers or staff reaches every
+  open dashboard within about a second (Server-Sent Events), with polling as
+  the fallback.
+
 **Everywhere**
 - Light, dark and system themes.
 - Works on phones.
@@ -184,18 +191,28 @@ Configuration:
 cd backend
 DB_PASSWORD=yourpassword npm test   # needs a MySQL; uses its own erp_test database
 npm run lint
-cd ../frontend && npm run lint && npm run build
+cd ../frontend && npm run lint && npm test && npm run build
 ```
 
-There are 83 integration tests (Vitest + Supertest, against real MySQL). They
-cover:
+There are 90 backend integration tests (Vitest + Supertest, against real
+MySQL). They cover:
 - role, record and field-level access, and session revocation;
 - atomic orders, rollbacks and concurrent stock-outs;
 - constraint errors;
 - CSV formula escaping;
 - the reorder maths, against hand-worked numbers;
 - configuration validation and health probes;
+- the live dashboard stream: who may open it, what a write sends, and that it
+  closes when the session is revoked;
 - that the OpenAPI spec matches the real routes.
+
+And 22 frontend tests (Vitest + Testing Library, in jsdom with the API
+mocked), covering:
+- the menu each role sees;
+- the route guard;
+- sign-in;
+- the dashboard per role;
+- live updates reconnecting, and falling back to polling.
 
 CI runs all of it on every pull request. It then builds the Docker images,
 starts the stack and runs `scripts/smoke-test.sh` through nginx.
@@ -205,7 +222,8 @@ starts the stack and runs `scripts/smoke-test.sh` through nginx.
 | | |
 |---|---|
 | [docs/API.md](docs/API.md) | Signing in, conventions, errors, the role matrix and examples |
-| [docs/openapi.yaml](docs/openapi.yaml) | OpenAPI 3.1 reference for all 57 endpoints |
+| [docs/openapi.yaml](docs/openapi.yaml) | OpenAPI 3.1 reference for all 58 endpoints |
+| [docs/postman/](docs/postman/) | Postman collection and local environment; sign in once and every request is authenticated |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design, data model, concurrency, security model, trade-offs |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Docker Compose or a plain VM: TLS, first admin, backups, monitoring, go-live checklist |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | How the project was upgraded, phase by phase, and why |
@@ -220,7 +238,7 @@ erp-system/
 │   │   ├── config/        validated env, MySQL pool, S3 client
 │   │   └── utils/         audit, errors, CSV, cookies, logger
 │   ├── scripts/           migrate, seed (+ demo data), create-admin
-│   ├── test/              integration tests
+│   ├── test/              integration tests (real MySQL)
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
@@ -228,12 +246,13 @@ erp-system/
 │   │   ├── components/ui/ the design system
 │   │   ├── styles/        tokens (light + dark), base, layout, components
 │   │   ├── hooks/ context/ config/nav.js (role access, shared by menu and routes)
+│   ├── test/              component and hook tests (jsdom)
 │   ├── nginx/             production web server config
 │   └── Dockerfile
 ├── database/migrations/   versioned SQL
-├── docs/                  API, OpenAPI, architecture, deployment, screenshots
+├── docs/                  API, OpenAPI, Postman, architecture, deployment, screenshots
 ├── deploy/                systemd unit for non-Docker installs
-├── scripts/smoke-test.sh  post-deploy check
+├── scripts/               smoke-test.sh (post-deploy check), build-postman.js
 ├── docker-compose.yml     MySQL + migrations + API + web
 └── .github/workflows/     CI
 ```

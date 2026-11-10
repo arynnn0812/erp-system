@@ -11,4 +11,11 @@ export default defineConfig({
       '/api': process.env.API_URL || 'http://localhost:4000',
     },
   },
+  // Component and hook tests (npm test): jsdom stands in for the browser and
+  // every API call is mocked, so they need no running backend.
+  test: {
+    environment: 'jsdom',
+    include: ['test/**/*.test.{js,jsx}'],
+    setupFiles: ['test/setup.js'],
+  },
 });
